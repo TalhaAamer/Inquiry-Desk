@@ -80,6 +80,7 @@ export default function Home() {
   }
 
   async function triage() {
+    if (mode === "auto") return;
     setError("");
     if (message.trim().length < 10 && images.length === 0) {
       setError("Add a message of at least 10 characters or a screenshot.");
@@ -119,10 +120,10 @@ export default function Home() {
   const profileSet = business.trim() !== "" || knowledge.trim() !== "";
 
   return (
-    <main className="relative isolate mx-auto max-w-[1200px] px-5 pb-16 pt-10">
+    <main className="relative isolate mx-auto max-w-300 px-5 pb-16 pt-10">
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-80 bg-gradient-to-b from-accent/15 to-transparent"
+        className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-80 bg-linear-to-b from-accent/15 to-transparent"
       />
 
       <header className="mb-9 flex flex-wrap items-end justify-between gap-5">
@@ -212,7 +213,7 @@ export default function Home() {
           />
 
           <div
-            className="-mx-1 my-2 flex flex-nowrap items-center gap-2 overflow-x-auto whitespace-nowrap px-1 py-1 [scrollbar-width:none]"
+            className="-mx-1 my-2 flex flex-nowrap items-center gap-2 overflow-x-auto whitespace-nowrap px-1 py-1 scrollbar-none"
             aria-label="Sample messages"
           >
             <span className="shrink-0 text-sm text-muted">Try a sample:</span>
@@ -372,8 +373,8 @@ export default function Home() {
                 className="mt-2 rounded-xl border-l-4 border-warn bg-warn/10 px-3.5 py-2.5 text-sm"
               >
                 <b className="font-semibold">AI auto-reply is in progress.</b>{" "}
-                It is not available yet, so every reply stays a draft for you to
-                review.
+                Triage is disabled while this mode is selected. Switch back to
+                Human review to triage a message.
               </p>
             )}
           </div>
@@ -389,8 +390,13 @@ export default function Home() {
 
           <button
             onClick={triage}
-            disabled={loading}
-            className="mt-5 w-full rounded-xl bg-accent py-3.5 font-semibold text-on transition active:scale-[.98] disabled:cursor-wait disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            disabled={loading || mode === "auto"}
+            title={
+              mode === "auto"
+                ? "Unavailable while AI auto-reply is in progress"
+                : undefined
+            }
+            className="mt-5 w-full rounded-xl bg-accent py-3.5 font-semibold text-on transition active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
             {loading ? "Reading message…" : "Triage message"}
           </button>

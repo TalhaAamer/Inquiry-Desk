@@ -1,7 +1,0 @@
-# Python libraries this project needs. Install them all with:
-#   pip install -r requirements.txt
-fastapi             # the web server framework
-uvicorn[standard]   # the program that actually runs the FastAPI server
-anthropic           # official library for talking to Claude
-python-dotenv       # reads your API key from the .env file
-pydantic            # defines and validates data shapes
