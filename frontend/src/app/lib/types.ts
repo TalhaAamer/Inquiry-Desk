@@ -1,4 +1,3 @@
-// types.ts - TypeScript descriptions of the data we send and receive.
 export type Category =
   | "new_project"
   | "support"
@@ -9,15 +8,13 @@ export type Category =
 export type Sentiment = "positive" | "neutral" | "frustrated" | "angry";
 export type Team = "sales" | "support" | "billing" | "management";
 
-// An uploaded picture, already shrunk and turned into base64 text.
 export interface Img {
   name: string;
-  preview: string; // data URL used to show the thumbnail
-  data: string; // base64 text sent to the backend
+  preview: string; 
+  data: string; 
   media_type: "image/jpeg" | "image/png" | "image/webp";
 }
 
-// Claude's answer. Mirrors the Triage class in main.py.
 export interface Triage {
   category: Category;
   urgency: number; // 1 to 5
@@ -30,7 +27,7 @@ export interface Triage {
   next_step: string;
   missing_info: string[];
   image_notes: string | null;
-  needs_review: boolean; // true = a human should check before sending
+  needs_review: boolean; 
   review_reason: string | null;
   reply_draft: string;
 }

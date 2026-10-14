@@ -1,8 +1,6 @@
 "use client";
 
-// page.tsx - main screen, layout v3: a compact input card on the left, a result
-// card of equal height on the right, and the reply settings tucked into a
-// collapsible section so the left side stays short.
+
 import { useRef, useState } from "react";
 import ResultCard from "./components/ResultCard";
 import type { Img, Triage } from "./lib/types";
@@ -17,7 +15,6 @@ const SAMPLES: Record<string, string> = {
 };
 const MAX_IMAGES = 3;
 const ACCEPTED = ["image/png", "image/jpeg", "image/webp", "image/gif"];
-// What the empty result card tells the user to expect.
 const PREVIEW = [
   ["Category and urgency", "What it is, and how fast to reply"],
   ["Sentiment and team", "How the customer feels, and who should handle it"],
@@ -29,7 +26,6 @@ const field =
   "w-full rounded-xl border border-line bg-card px-3.5 py-2.5 text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 const card = "rounded-[20px] border border-line bg-card p-6 shadow-sm"; // shared card look
 
-// Shrinks a picture to at most 1600px and returns it as base64 text.
 async function shrink(file: File): Promise<Img> {
   const bmp = await createImageBitmap(file);
   const scale = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
@@ -37,10 +33,9 @@ async function shrink(file: File): Promise<Img> {
   canvas.width = Math.round(bmp.width * scale);
   canvas.height = Math.round(bmp.height * scale);
   const ctx = canvas.getContext("2d")!;
-  ctx.fillStyle = "#fff"; // white behind transparent PNGs
+  ctx.fillStyle = "#fff";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
-  // JPEG and WebP keep their type. PNG stays PNG so small text stays sharp. GIF becomes PNG.
   const type = file.type === "image/jpeg" || file.type === "image/webp" ? file.type : "image/png";
   let url = canvas.toDataURL(type, 0.85);
   if (url.length > 3_000_000) url = canvas.toDataURL("image/jpeg", 0.8); // too big: use JPEG
@@ -61,7 +56,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [drag, setDrag] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  const profileRef = useRef<HTMLDialogElement>(null); // the Business profile popup
+  const profileRef = useRef<HTMLDialogElement>(null); 
 
   async function addFiles(files: File[]) {
     const valid = files.filter((f) => ACCEPTED.includes(f.type));
@@ -120,7 +115,6 @@ export default function Home() {
 
   return (
     <main className="relative isolate mx-auto max-w-[1200px] px-5 pb-16 pt-10">
-      {/* Soft colored glow behind the header */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-80 bg-gradient-to-b from-accent/15 to-transparent"
@@ -153,9 +147,7 @@ export default function Home() {
       </header>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_1.1fr]">
-        {/* LEFT: message, screenshots, collapsible settings */}
         <section className={card}>
-          {/* Step zero: the business profile comes first, because replies are built from it. */}
           <button
             type="button"
             onClick={() => profileRef.current?.showModal()}
@@ -265,7 +257,6 @@ export default function Home() {
             </ul>
           )}
 
-          {/* Quick settings stay visible. Business details live in a popup. */}
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
             <label className="text-sm font-medium text-muted">
               Reply tone
@@ -337,7 +328,6 @@ export default function Home() {
         Replies are drafts. Always review before sending.
       </p>
 
-      {/* Business profile popup. Clicking the dark area outside closes it. */}
       <dialog
         ref={profileRef}
         onClick={(e) => e.target === e.currentTarget && e.currentTarget.close()}

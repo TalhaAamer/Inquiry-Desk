@@ -1,7 +1,5 @@
 "use client";
 
-// ResultCard.tsx - shows Claude's answer. New in v2: sentiment, team,
-// questions to ask, screenshot notes, and a Copy JSON button.
 import { useEffect, useState } from "react";
 import { Category, Sentiment, Team, Triage } from "../lib/types";
 
@@ -13,7 +11,6 @@ const CATEGORY: Record<Category, string> = {
   partnership: "Partnership",
   spam: "Likely spam",
 };
-// Pill colors per sentiment (full class names so Tailwind can find them).
 const SENTIMENT: Record<Sentiment, string> = {
   positive: "bg-ok/15 text-ok",
   neutral: "bg-line text-muted",
@@ -27,7 +24,6 @@ const TEAM: Record<Team, string> = {
   management: "Management",
 };
 const LEVEL = ["", "Can wait", "Low", "Normal", "High", "Reply today"];
-// Suggested reply time for each urgency level (1 to 5).
 const DEADLINE = [
   "",
   "when you have time",
@@ -41,8 +37,8 @@ const btn =
 
 export default function ResultCard({ data }: { data: Triage }) {
   const [reply, setReply] = useState(data.reply_draft);
-  const [filled, setFilled] = useState(0); // colored gauge bars (starts at 0 to animate)
-  const [toast, setToast] = useState(""); // text of the popup; empty = hidden
+  const [filled, setFilled] = useState(0); 
+  const [toast, setToast] = useState(""); 
 
   useEffect(() => {
     const t = setTimeout(() => setFilled(data.urgency), 60);
@@ -104,7 +100,6 @@ export default function ResultCard({ data }: { data: Triage }) {
       </p>
       <p className="mb-3 text-muted">Next step: {data.next_step}</p>
 
-      {/* NEW: human-review banner and suggested reply time. */}
       <div className={`mb-5 rounded-xl border-l-4 px-3.5 py-3 ${review}`}>
         <b className="block font-semibold">
           {data.needs_review
@@ -129,7 +124,6 @@ export default function ResultCard({ data }: { data: Triage }) {
         ))}
       </div>
 
-      {/* Only drawn when Claude found something missing. */}
       {data.missing_info.length > 0 && (
         <div className="mb-5">
           <p className="mb-1.5 text-sm font-medium text-muted">
@@ -143,7 +137,6 @@ export default function ResultCard({ data }: { data: Triage }) {
         </div>
       )}
 
-      {/* Only drawn when screenshots were uploaded. */}
       {data.image_notes && (
         <div className="mb-5 rounded-xl border border-line px-3 py-2.5">
           <span className="text-sm text-muted">What the screenshots show</span>
@@ -159,7 +152,6 @@ export default function ResultCard({ data }: { data: Triage }) {
           <button onClick={() => copy(reply, "Reply copied")} className={btn}>
             Copy reply
           </button>
-          {/* The whole result as JSON, ready to paste into your own software. */}
           <button
             onClick={() => copy(JSON.stringify(data, null, 2), "JSON copied")}
             className={btn}
