@@ -1,6 +1,5 @@
 "use client";
 
-
 import { useRef, useState } from "react";
 import ResultCard from "./components/ResultCard";
 import type { Img, Triage } from "./lib/types";
@@ -24,7 +23,7 @@ const PREVIEW = [
 ];
 const field =
   "w-full rounded-xl border border-line bg-card px-3.5 py-2.5 text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
-const card = "rounded-[20px] border border-line bg-card p-6 shadow-sm"; // shared card look
+const card = "rounded-[20px] border border-line bg-card p-6 shadow-sm";
 
 async function shrink(file: File): Promise<Img> {
   const bmp = await createImageBitmap(file);
@@ -36,9 +35,13 @@ async function shrink(file: File): Promise<Img> {
   ctx.fillStyle = "#fff";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
-  const type = file.type === "image/jpeg" || file.type === "image/webp" ? file.type : "image/png";
+
+  const type =
+    file.type === "image/jpeg" || file.type === "image/webp"
+      ? file.type
+      : "image/png";
   let url = canvas.toDataURL(type, 0.85);
-  if (url.length > 3_000_000) url = canvas.toDataURL("image/jpeg", 0.8); // too big: use JPEG
+  if (url.length > 3_000_000) url = canvas.toDataURL("image/jpeg", 0.8);
   const media_type = url.slice(5, url.indexOf(";")) as Img["media_type"];
   return { name: file.name, preview: url, data: url.split(",")[1], media_type };
 }
@@ -50,13 +53,15 @@ export default function Home() {
   const [knowledge, setKnowledge] = useState("");
   const [tone, setTone] = useState("friendly");
   const [language, setLanguage] = useState("same as the customer");
+
+  const [mode, setMode] = useState<"human" | "auto">("human");
   const [result, setResult] = useState<Triage | null>(null);
   const [run, setRun] = useState(0);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [drag, setDrag] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  const profileRef = useRef<HTMLDialogElement>(null); 
+  const profileRef = useRef<HTMLDialogElement>(null);
 
   async function addFiles(files: File[]) {
     const valid = files.filter((f) => ACCEPTED.includes(f.type));
@@ -99,7 +104,7 @@ export default function Home() {
         throw new Error(
           Array.isArray(data.detail)
             ? data.detail[0].msg.replace("Value error, ", "")
-            : (data.detail ?? "Something went wrong.")
+            : (data.detail ?? "Something went wrong."),
         );
       }
       setResult(data as Triage);
@@ -123,7 +128,16 @@ export default function Home() {
       <header className="mb-9 flex flex-wrap items-end justify-between gap-5">
         <div className="flex items-center gap-4">
           <div className="grid h-12 w-12 place-items-center rounded-2xl bg-accent text-on">
-            <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <svg
+              viewBox="0 0 24 24"
+              className="h-6 w-6"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
               <path d="M22 12h-6l-2 3h-4l-2-3H2" />
               <path d="M5.5 5h13L22 12v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6z" />
             </svg>
@@ -138,8 +152,15 @@ export default function Home() {
           </div>
         </div>
         <ul className="flex flex-wrap gap-2 text-sm font-medium text-muted">
-          {["Reads screenshots", "Replies from your facts", "Flags what needs a human"].map((t) => (
-            <li key={t} className="rounded-full border border-line bg-card px-3.5 py-1.5">
+          {[
+            "Reads screenshots",
+            "Replies from your facts",
+            "Flags what needs a human",
+          ].map((t) => (
+            <li
+              key={t}
+              className="rounded-full border border-line bg-card px-3.5 py-1.5"
+            >
               {t}
             </li>
           ))}
@@ -154,7 +175,10 @@ export default function Home() {
             className="mb-6 flex w-full items-center justify-between gap-3 rounded-xl border border-line px-4 py-3 text-left hover:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
             <span className="flex items-center gap-3">
-              <span aria-hidden className={`h-2.5 w-2.5 shrink-0 rounded-full ${profileSet ? "bg-ok" : "bg-warn"}`} />
+              <span
+                aria-hidden
+                className={`h-2.5 w-2.5 shrink-0 rounded-full ${profileSet ? "bg-ok" : "bg-warn"}`}
+              />
               <span>
                 <b className="block text-sm font-semibold">Business profile</b>
                 <span className="text-sm text-muted">
@@ -164,10 +188,14 @@ export default function Home() {
                 </span>
               </span>
             </span>
-            <span className="text-sm font-semibold text-accent">{profileSet ? "Edit" : "Set up"}</span>
+            <span className="text-sm font-semibold text-accent">
+              {profileSet ? "Edit" : "Set up"}
+            </span>
           </button>
 
-          <h2 className="mb-4 font-display text-lg font-semibold">Customer message</h2>
+          <h2 className="mb-4 font-display text-lg font-semibold">
+            Customer message
+          </h2>
           <textarea
             aria-label="Customer message"
             value={message}
@@ -183,7 +211,10 @@ export default function Home() {
             className={`${field} min-h-36 resize-y`}
           />
 
-          <div className="-mx-1 my-2 flex flex-nowrap items-center gap-2 overflow-x-auto whitespace-nowrap px-1 py-1 [scrollbar-width:none]" aria-label="Sample messages">
+          <div
+            className="-mx-1 my-2 flex flex-nowrap items-center gap-2 overflow-x-auto whitespace-nowrap px-1 py-1 [scrollbar-width:none]"
+            aria-label="Sample messages"
+          >
             <span className="shrink-0 text-sm text-muted">Try a sample:</span>
             {Object.entries(SAMPLES).map(([name, text]) => (
               <button
@@ -231,7 +262,9 @@ export default function Home() {
             >
               browse
             </button>
-            <span className="block text-xs">Up to {MAX_IMAGES} images: PNG, JPG, WebP or GIF</span>
+            <span className="block text-xs">
+              Up to {MAX_IMAGES} images: PNG, JPG, WebP or GIF
+            </span>
           </div>
 
           {images.length > 0 && (
@@ -247,7 +280,9 @@ export default function Home() {
                   <button
                     type="button"
                     aria-label={`Remove ${im.name}`}
-                    onClick={() => setImages((c) => c.filter((_, j) => j !== i))}
+                    onClick={() =>
+                      setImages((c) => c.filter((_, j) => j !== i))
+                    }
                     className="absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full bg-ink text-xs text-bg"
                   >
                     ×
@@ -260,7 +295,11 @@ export default function Home() {
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
             <label className="text-sm font-medium text-muted">
               Reply tone
-              <select value={tone} onChange={(e) => setTone(e.target.value)} className={`${field} mt-1.5 font-normal`}>
+              <select
+                value={tone}
+                onChange={(e) => setTone(e.target.value)}
+                className={`${field} mt-1.5 font-normal`}
+              >
                 <option value="friendly">Friendly</option>
                 <option value="professional">Professional</option>
                 <option value="short">Short and direct</option>
@@ -268,8 +307,14 @@ export default function Home() {
             </label>
             <label className="text-sm font-medium text-muted">
               Reply language
-              <select value={language} onChange={(e) => setLanguage(e.target.value)} className={`${field} mt-1.5 font-normal`}>
-                <option value="same as the customer">Same as the customer</option>
+              <select
+                value={language}
+                onChange={(e) => setLanguage(e.target.value)}
+                className={`${field} mt-1.5 font-normal`}
+              >
+                <option value="same as the customer">
+                  Same as the customer
+                </option>
                 <option>English</option>
                 <option>Urdu</option>
                 <option>Arabic</option>
@@ -279,8 +324,65 @@ export default function Home() {
             </label>
           </div>
 
+          <div className="mt-5">
+            <span
+              id="mode-label"
+              className="mb-1.5 block text-sm font-medium text-muted"
+            >
+              Reply mode
+            </span>
+            <div
+              role="radiogroup"
+              aria-labelledby="mode-label"
+              className="grid grid-cols-2 gap-1 rounded-xl border border-line bg-bg p-1"
+            >
+              {(["human", "auto"] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  role="radio"
+                  aria-checked={mode === m}
+                  onClick={() => setMode(m)}
+                  className={`flex items-center justify-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
+                    mode === m
+                      ? "bg-accent text-on"
+                      : "text-muted hover:text-ink"
+                  }`}
+                >
+                  {m === "human" ? (
+                    "Human review"
+                  ) : (
+                    <>
+                      AI auto-reply
+                      <span className="rounded-full border border-current px-2 py-0.5 text-[11px] font-medium">
+                        In progress
+                      </span>
+                    </>
+                  )}
+                </button>
+              ))}
+            </div>
+            {mode === "human" ? (
+              <p className="mt-2 text-xs text-muted">
+                The AI writes a draft. A person reviews and sends it.
+              </p>
+            ) : (
+              <p
+                role="status"
+                className="mt-2 rounded-xl border-l-4 border-warn bg-warn/10 px-3.5 py-2.5 text-sm"
+              >
+                <b className="font-semibold">AI auto-reply is in progress.</b>{" "}
+                It is not available yet, so every reply stays a draft for you to
+                review.
+              </p>
+            )}
+          </div>
+
           {error && (
-            <p role="alert" className="mt-4 rounded-xl border border-hot px-3.5 py-3 text-hot">
+            <p
+              role="alert"
+              className="mt-4 rounded-xl border border-hot px-3.5 py-3 text-hot"
+            >
               {error}
             </p>
           )}
@@ -294,24 +396,50 @@ export default function Home() {
           </button>
         </section>
 
-        {/* RIGHT: skeleton while loading, result when ready, otherwise a preview of what you'll get */}
         <section aria-live="polite" className={`${card} flex flex-col`}>
-          <h2 className="mb-4 font-display text-lg font-semibold">Triage result</h2>
+          <h2 className="mb-4 font-display text-lg font-semibold">
+            Triage result
+          </h2>
           {loading ? (
             <div className="space-y-4">
-              {["h-7 w-2/5", "h-5 w-full", "h-5 w-4/5", "h-24 w-full", "h-40 w-full"].map((c) => (
-                <div key={c} className={`animate-pulse rounded-lg bg-line motion-reduce:animate-none ${c}`} />
+              {[
+                "h-7 w-2/5",
+                "h-5 w-full",
+                "h-5 w-4/5",
+                "h-24 w-full",
+                "h-40 w-full",
+              ].map((c) => (
+                <div
+                  key={c}
+                  className={`animate-pulse rounded-lg bg-line motion-reduce:animate-none ${c}`}
+                />
               ))}
             </div>
           ) : result ? (
-            <ResultCard key={run} data={result} />
+            <>
+              {mode === "auto" && (
+                <p
+                  role="status"
+                  className="mb-4 rounded-xl border-l-4 border-warn bg-warn/10 px-3.5 py-2.5 text-sm"
+                >
+                  Auto-reply is in progress, so nothing was sent. Review this
+                  draft before replying.
+                </p>
+              )}
+              <ResultCard key={run} data={result} />
+            </>
           ) : (
             <div>
-              <p className="mb-2 text-muted">Add a message or screenshot, and this panel will show:</p>
+              <p className="mb-2 text-muted">
+                Add a message or screenshot, and this panel will show:
+              </p>
               <ul className="divide-y divide-line">
                 {PREVIEW.map(([title, text]) => (
                   <li key={title} className="flex gap-3 py-3.5">
-                    <span aria-hidden className="mt-2 h-2.5 w-2.5 shrink-0 rounded-full bg-accent" />
+                    <span
+                      aria-hidden
+                      className="mt-2 h-2.5 w-2.5 shrink-0 rounded-full bg-accent"
+                    />
                     <span>
                       <b className="block font-semibold">{title}</b>
                       <span className="text-sm text-muted">{text}</span>
@@ -334,8 +462,12 @@ export default function Home() {
         className="m-auto w-[min(560px,92vw)] rounded-2xl border border-line bg-card p-0 text-ink backdrop:bg-black/50"
       >
         <div className="p-6">
-          <h2 className="font-display text-lg font-semibold">Business profile</h2>
-          <p className="mb-4 mt-1 text-sm text-muted">Set this once. Replies only use what you write here.</p>
+          <h2 className="font-display text-lg font-semibold">
+            Business profile
+          </h2>
+          <p className="mb-4 mt-1 text-sm text-muted">
+            Set this once. Replies only use what you write here.
+          </p>
           <label className="block text-sm font-medium text-muted">
             About your business
             <input
