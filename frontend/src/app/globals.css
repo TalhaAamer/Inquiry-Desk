@@ -1,0 +1,48 @@
+/* globals.css - styles that apply to the whole app. */
+
+/* Loads Tailwind, the library that gives us classes like "p-5" and "rounded-xl". */
+@import "tailwindcss";
+
+/* Colors stored as variables (light mode). Change a value here and the
+   whole app updates. */
+:root {
+  color-scheme: light dark; /* native dropdown lists follow the theme */
+  --bg: #edf0f7;      /* page background */
+  --card: #ffffff;    /* card background */
+  --ink: #121b33;     /* main text */
+  --muted: #5c6684;   /* softer text */
+  --line: #d5dbea;    /* borders */
+  --accent: #3340f5;  /* buttons and highlights */
+  --on: #ffffff;      /* text on top of the accent color */
+}
+
+/* If the user's computer is in dark mode, swap in these colors instead. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1424;
+    --card: #171f36;
+    --ink: #eaefff;
+    --muted: #9aa5c6;
+    --line: #2a3558;
+    --accent: #7a85ff;
+    --on: #0e1424;
+  }
+}
+
+/* Turns the variables above into Tailwind classes:
+   --color-card becomes bg-card, text-card, border-card, and so on. */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-card: var(--card);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-on: var(--on);
+  --color-ok: #1f9d7a;    /* low urgency (green) */
+  --color-warn: #d99a00;  /* medium urgency (amber) */
+  --color-hot: #e5484d;   /* high urgency and errors (red) */
+  /* Fonts. The -src variables are set by layout.tsx. */
+  --font-sans: var(--font-sans-src), system-ui, sans-serif;
+  --font-display: var(--font-display-src), system-ui, sans-serif;
+}
