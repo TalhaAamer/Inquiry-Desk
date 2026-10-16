@@ -25,7 +25,12 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${display.variable} ${sans.variable}`}>
       {/* Tailwind classes: background color, body font, text color, smooth text */}
-      <body className="bg-bg font-sans text-ink antialiased">{children}</body>
+      <body
+        className="bg-bg font-sans text-ink antialiased"
+        suppressHydrationWarning
+      >
+        {children}
+      </body>
     </html>
   );
 }
