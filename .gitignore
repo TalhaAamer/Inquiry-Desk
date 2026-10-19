@@ -1,14 +1,14 @@
-# Python
+
 .venv/
 __pycache__/
 *.pyc
 
-# Secrets (keep .env.example so others know what to set)
 .env
 .env.*
+*.db
 *.pem
 
-# Editor and system files
+
 .vscode/
 Thumbs.db
 *.log

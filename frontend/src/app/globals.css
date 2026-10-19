@@ -13,8 +13,9 @@
   --on: #ffffff;      
 }
 
+/* "System" follows the device. An explicit Light or Dark choice sets data-theme on <html>. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #0e1424;
     --card: #171f36;
     --ink: #eaefff;
@@ -23,6 +24,21 @@
     --accent: #7a85ff;
     --on: #0e1424;
   }
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0e1424;
+  --card: #171f36;
+  --ink: #eaefff;
+  --muted: #9aa5c6;
+  --line: #2a3558;
+  --accent: #7a85ff;
+  --on: #0e1424;
 }
 
 
@@ -40,4 +56,31 @@
 
   --font-sans: var(--font-sans-src), system-ui, sans-serif;
   --font-display: var(--font-display-src), system-ui, sans-serif;
+}
+
+/* Custom arrow keeps the right gap equal to the left padding; the native arrow hugs the edge. */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 2.5rem;
+  background-repeat: no-repeat;
+  background-position: right 0.625rem center;
+  background-size: 1rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235c6684' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239aa5c6' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  }
+}
+
+:root[data-theme="dark"] select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239aa5c6' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+
+/* Dropdown lists ignore the select's transparent background, so give them theme colors. */
+select option {
+  background-color: var(--card);
+  color: var(--ink);
 }
