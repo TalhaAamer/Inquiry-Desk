@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Bricolage_Grotesque, Instrument_Sans } from "next/font/google"; 
 import "./globals.css"; 
+import { AuthProvider } from "./lib/auth";
 
 
 const display = Bricolage_Grotesque({
@@ -17,9 +18,6 @@ export const metadata: Metadata = {
   description: "Sort customer messages and draft replies with AI.",
 };
 
-// Runs before first paint so the chosen theme never flashes.
-const themeScript = `try{var t=localStorage.getItem("inquiry-desk:theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}`;
-
 export default function RootLayout({
   children,
 }: {
@@ -32,14 +30,20 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <head>
-        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        {/* Applies the saved theme before the first paint (Light when none is saved), so there is no flash. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "try{var m=document.cookie.match(/(?:^|; )theme=(light|dark|system)/),t=m?m[1]:'light';if(t==='system')delete document.documentElement.dataset.theme;else document.documentElement.dataset.theme=t}catch(e){}",
+          }}
+        />
       </head>
       {/* Tailwind classes: background color, body font, text color, smooth text */}
       <body
         className="bg-bg font-sans text-ink antialiased"
         suppressHydrationWarning
       >
-        {children}
+        <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
   );

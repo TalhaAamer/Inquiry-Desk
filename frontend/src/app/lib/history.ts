@@ -1,41 +1,70 @@
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  orderBy,
+  query,
+  writeBatch,
+} from "firebase/firestore";
+import { getUid, later, put, userDoc } from "./cloud";
+import { db } from "./firebase";
 import type { HistoryItem, Settings } from "./types";
 
-const HISTORY_KEY = "inquiry-desk:history";
-const SETTINGS_KEY = "inquiry-desk:settings";
 export const HISTORY_LIMIT = 25;
 
-export function loadHistory(): HistoryItem[] {
-  try {
-    const raw = JSON.parse(localStorage.getItem(HISTORY_KEY) ?? "[]");
-    return Array.isArray(raw) ? raw : [];
-  } catch {
-    return [];
-  }
+// What was last stored for each history item, so only changed items are written.
+const stored = new Map<string, string>();
+
+const historyCol = () => collection(db, "users", getUid() ?? "none", "history");
+
+export async function loadHistory(): Promise<HistoryItem[]> {
+  const snap = await getDocs(query(historyCol(), orderBy("at", "desc")));
+  stored.clear();
+  const items: HistoryItem[] = [];
+  snap.forEach((d) => {
+    const data = { ...d.data() };
+    delete data.updatedAt;
+    const item = { ...data, id: d.id } as HistoryItem;
+    stored.set(d.id, JSON.stringify(item));
+    items.push(item);
+  });
+  return items.slice(0, HISTORY_LIMIT);
 }
 
 export function saveHistory(items: HistoryItem[]) {
-  try {
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(items));
-  } catch {
-    // Storage full or blocked: history just won't persist.
-  }
+  later("history", 600, async () => {
+    const uid = getUid();
+    if (!uid) return;
+    const batch = writeBatch(db);
+    const keep = new Set<string>();
+    let writes = 0;
+    for (const item of items) {
+      keep.add(item.id);
+      const json = JSON.stringify(item);
+      if (stored.get(item.id) === json) continue;
+      const { id, ...data } = item;
+      batch.set(doc(db, "users", uid, "history", id), { ...data, updatedAt: Date.now() });
+      stored.set(id, json);
+      writes += 1;
+    }
+    for (const id of [...stored.keys()]) {
+      if (keep.has(id)) continue;
+      batch.delete(doc(db, "users", uid, "history", id));
+      stored.delete(id);
+      writes += 1;
+    }
+    if (writes) await batch.commit();
+  });
 }
 
-export function loadSettings(): Partial<Settings> {
-  try {
-    const raw = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "{}");
-    return raw && typeof raw === "object" ? raw : {};
-  } catch {
-    return {};
-  }
+export async function loadSettings(): Promise<Partial<Settings>> {
+  const snap = await getDoc(userDoc("settings", "main"));
+  return snap.exists() ? (snap.data() as Partial<Settings>) : {};
 }
 
 export function saveSettings(s: Settings) {
-  try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
-  } catch {
-    // Ignore: settings just won't persist.
-  }
+  later("settings", 800, () => put(userDoc("settings", "main"), s));
 }
 
 const ENGLISH_WORDS = new Set(

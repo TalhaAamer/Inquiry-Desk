@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { apiFetch } from "../lib/auth";
 import type { Gap, HistoryItem } from "../lib/types";
 
 const btn =
@@ -28,7 +29,7 @@ export default function KnowledgeGaps({ items, knowledge, onAdd }: Props) {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/gaps", {
+      const res = await apiFetch("/api/gaps", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ questions, knowledge }),

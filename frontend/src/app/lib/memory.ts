@@ -1,7 +1,15 @@
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  writeBatch,
+} from "firebase/firestore";
+import { getUid, later, put, track, userDoc } from "./cloud";
+import { db } from "./firebase";
 import type { Category, HistoryItem, Sentiment } from "./types";
 
-const VOICE_KEY = "inquiry-desk:voice";
-const CUSTOMER_KEY = "inquiry-desk:customers";
 const MAX_EXAMPLES = 20;
 const MAX_CUSTOMERS = 300;
 
@@ -24,32 +32,22 @@ export interface CustomerRecord {
   moods: Sentiment[];
 }
 
-function read<T>(key: string, fallback: T): T {
-  try {
-    const raw = JSON.parse(localStorage.getItem(key) ?? "null");
-    return raw ?? fallback;
-  } catch {
-    return fallback;
-  }
-}
+// Customer memory is loaded once after sign-in and kept here for quick lookups.
+let customers: Record<string, CustomerRecord> = {};
 
-function write(key: string, value: unknown) {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // Storage full or blocked: nothing is remembered.
-  }
-}
+const customerKey = (email: string) => encodeURIComponent(email.toLowerCase());
 
-export const loadVoice = (): VoiceStore => {
-  const v = read<Partial<VoiceStore>>(VOICE_KEY, {});
+export async function loadVoice(): Promise<VoiceStore> {
+  const snap = await getDoc(userDoc("settings", "voice"));
+  const v = (snap.data() ?? {}) as Partial<VoiceStore>;
   return {
     enabled: v.enabled !== false,
     examples: Array.isArray(v.examples) ? v.examples : [],
   };
-};
+}
 
-export const saveVoice = (v: VoiceStore) => write(VOICE_KEY, v);
+export const saveVoice = (v: VoiceStore) =>
+  later("voice", 800, () => put(userDoc("settings", "voice"), v));
 
 const words = (s: string) => s.toLowerCase().split(/\s+/).filter(Boolean);
 
@@ -89,12 +87,23 @@ const EMAIL = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
 export const findEmail = (text: string) =>
   text.match(EMAIL)?.[0].toLowerCase() ?? null;
 
-export const loadCustomers = () =>
-  read<Record<string, CustomerRecord>>(CUSTOMER_KEY, {});
+export async function loadCustomers(): Promise<Record<string, CustomerRecord>> {
+  const snap = await getDocs(collection(db, "users", getUid() ?? "none", "customers"));
+  customers = {};
+  snap.forEach((d) => {
+    const { email, name, count, lastAt, summaries, moods } = d.data();
+    if (typeof email === "string") {
+      customers[email.toLowerCase()] = { name, count, lastAt, summaries, moods };
+    }
+  });
+  return customers;
+}
+
+export const customerTotal = () => Object.keys(customers).length;
 
 export function getCustomer(email: string | null): CustomerRecord | null {
   if (!email) return null;
-  return loadCustomers()[email.toLowerCase()] ?? null;
+  return customers[email.toLowerCase()] ?? null;
 }
 
 export function recordCustomer(
@@ -105,24 +114,31 @@ export function recordCustomer(
   at: number,
 ) {
   if (!email) return;
-  const all = loadCustomers();
   const key = email.toLowerCase();
-  const prev = all[key];
-  all[key] = {
+  const prev = customers[key];
+  const next: CustomerRecord = {
     name: name ?? prev?.name ?? null,
     count: (prev?.count ?? 0) + 1,
     lastAt: at,
     summaries: [...(prev?.summaries ?? []), summary].slice(-3),
     moods: [...(prev?.moods ?? []), mood].slice(-5),
   };
-  const keys = Object.keys(all);
+  customers[key] = next;
+  const uid = getUid();
+  if (!uid) return;
+  const jobs = [put(userDoc("customers", customerKey(key)), { email: key, ...next })];
+  const keys = Object.keys(customers);
   if (keys.length > MAX_CUSTOMERS) {
+    // Forget the customers who wrote longest ago.
     keys
-      .sort((a, b) => all[a].lastAt - all[b].lastAt)
+      .sort((a, b) => customers[a].lastAt - customers[b].lastAt)
       .slice(0, keys.length - MAX_CUSTOMERS)
-      .forEach((k) => delete all[k]);
+      .forEach((k) => {
+        delete customers[k];
+        jobs.push(deleteDoc(userDoc("customers", customerKey(k))));
+      });
   }
-  write(CUSTOMER_KEY, all);
+  void track(Promise.all(jobs));
 }
 
 export const toHistoryPayload = (c: CustomerRecord | null) =>
@@ -150,10 +166,12 @@ export const isRepeatTrouble = (p: HistoryItem["prior"]) =>
   !!p &&
   p.moods.slice(-2).some((m) => m === "angry" || m === "frustrated");
 
-export const clearAllMemory = () => {
-  try {
-    localStorage.removeItem(CUSTOMER_KEY);
-  } catch {
-    // Ignore.
-  }
-};
+export async function clearAllMemory() {
+  const uid = getUid();
+  customers = {};
+  if (!uid) return;
+  const snap = await getDocs(collection(db, "users", uid, "customers"));
+  const batch = writeBatch(db);
+  snap.forEach((d) => batch.delete(doc(db, "users", uid, "customers", d.id)));
+  await track(batch.commit());
+}

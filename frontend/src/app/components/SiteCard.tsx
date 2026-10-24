@@ -2,6 +2,8 @@
 
 import QRCode from "qrcode";
 import { useEffect, useState } from "react";
+import { apiFetch } from "../lib/auth";
+import { later } from "../lib/cloud";
 import {
   PLATFORMS,
   contactLink,
@@ -56,10 +58,10 @@ export default function SiteCard({ site, appOrigin, waiting, onChange, onDelete 
     setSaving(true);
     setNote(null);
     try {
-      const res = await fetch("/api/sites/origins", {
+      const res = await apiFetch("/api/sites/update", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: site.id, secret: site.secret, origins: address }),
+        body: JSON.stringify({ id: site.id, origins: address, options: site.options }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -80,7 +82,15 @@ export default function SiteCard({ site, appOrigin, waiting, onChange, onDelete 
   }
 
   function setOption<K extends keyof WidgetOptions>(key: K, value: WidgetOptions[K]) {
-    onChange({ ...site, options: { ...site.options, [key]: value } });
+    const options = { ...site.options, [key]: value };
+    onChange({ ...site, options });
+    later(`site:${site.id}`, 800, () =>
+      apiFetch("/api/sites/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: site.id, origins: site.origins.join(" "), options }),
+      }),
+    );
   }
 
   return (

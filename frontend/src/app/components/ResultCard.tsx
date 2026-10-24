@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { apiFetch } from "../lib/auth";
 import { dueAt, formatDue, highlight, parseSignals, replyWarnings } from "../lib/guard";
 import { isRepeatTrouble } from "../lib/memory";
 import { canSpeak, speak, speechLang, stopSpeaking } from "../lib/voice";
@@ -133,7 +134,7 @@ export default function ResultCard({
     setSimError("");
     try {
       const sent = reply;
-      const res = await fetch("/api/simulate", {
+      const res = await apiFetch("/api/simulate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -162,7 +163,7 @@ export default function ResultCard({
     try {
       const out = await Promise.all(
         VARIANTS.map(async ([label, instruction]) => {
-          const res = await fetch("/api/refine", {
+          const res = await apiFetch("/api/refine", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ reply, instruction, ...context }),
@@ -190,7 +191,7 @@ export default function ResultCard({
     setRewriting(true);
     setRewriteError("");
     try {
-      const res = await fetch("/api/refine", {
+      const res = await apiFetch("/api/refine", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reply, instruction, ...context }),
@@ -335,7 +336,7 @@ export default function ResultCard({
             className="min-w-0 rounded-xl border border-line px-3 py-2.5"
           >
             <span className="text-sm text-muted">{label}</span>
-            <b className="block break-words font-semibold">{value ?? "—"}</b>
+            <b className="block font-semibold wrap-break-word">{value ?? "—"}</b>
           </div>
         ))}
       </div>

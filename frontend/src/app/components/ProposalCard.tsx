@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { apiFetch } from "../lib/auth";
 import type { Proposal } from "../lib/types";
 
 const btn =
@@ -37,7 +38,7 @@ export default function ProposalCard({ message, context }: Props) {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/proposal", {
+      const res = await apiFetch("/api/proposal", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message, ...context }),

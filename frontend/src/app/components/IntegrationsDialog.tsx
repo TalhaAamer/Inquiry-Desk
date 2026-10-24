@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type RefObject } from "react";
 import SiteCard from "./SiteCard";
+import { apiFetch } from "../lib/auth";
 import {
   DEFAULT_OPTIONS,
   alertPayload,
@@ -64,10 +65,10 @@ export default function IntegrationsDialog({
     const entries = await Promise.all(
       sites.map(async (s) => {
         try {
-          const res = await fetch("/api/sites/count", {
+          const res = await apiFetch("/api/sites/count", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id: s.id, secret: s.secret }),
+            body: JSON.stringify({ id: s.id }),
           });
           const data = await res.json();
           return [s.id, res.ok ? (data.waiting as number) : -1] as const;
@@ -95,10 +96,10 @@ export default function IntegrationsDialog({
     setError("");
     setBusy(true);
     try {
-      const res = await fetch("/api/sites", {
+      const res = await apiFetch("/api/sites", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, options: DEFAULT_OPTIONS }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -110,13 +111,7 @@ export default function IntegrationsDialog({
       }
       onSites([
         ...sites,
-        {
-          id: data.id,
-          secret: data.secret,
-          name: name.trim(),
-          origins: data.origins,
-          options: { ...DEFAULT_OPTIONS },
-        },
+        { ...data, options: { ...DEFAULT_OPTIONS, ...data.options } },
       ]);
       setName("");
     } catch (e) {
@@ -134,13 +129,15 @@ export default function IntegrationsDialog({
     )
       return;
     try {
-      await fetch("/api/sites/delete", {
+      const res = await apiFetch("/api/sites/delete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: s.id, secret: s.secret }),
+        body: JSON.stringify({ id: s.id }),
       });
-    } finally {
+      if (!res.ok) throw new Error("Could not delete");
       onSites(sites.filter((x) => x.id !== s.id));
+    } catch {
+      setError("Could not delete this contact page. Please try again.");
     }
   }
 
@@ -149,7 +146,7 @@ export default function IntegrationsDialog({
     setTestNote(null);
     try {
       const p = alertPayload(SAMPLE);
-      const res = await fetch("/api/notify", {
+      const res = await apiFetch("/api/notify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: alerts.url.trim(), ...p }),

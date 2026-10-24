@@ -79,6 +79,72 @@ select {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239aa5c6' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 }
 
+/* The selected theme button follows <html data-theme>, so it is right before React loads. */
+:root[data-theme="light"] [data-theme-opt="light"],
+:root[data-theme="dark"] [data-theme-opt="dark"],
+:root:not([data-theme]) [data-theme-opt="system"] {
+  background-color: var(--accent);
+  color: var(--on);
+}
+
+/* Tailwind v4 resets buttons to the default arrow; show a hand on everything clickable. */
+@layer base {
+  button:not(:disabled),
+  [role="button"],
+  [role="radio"],
+  summary,
+  select,
+  label[for],
+  input[type="checkbox"],
+  input[type="radio"],
+  input[type="file"] {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: not-allowed;
+  }
+}
+
+/* Sign-in illustration animations */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(26px) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-9px); }
+}
+@keyframes drift {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(34px, -24px) scale(1.08); }
+}
+@keyframes fill {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+@keyframes pop {
+  0% { opacity: 0; transform: scale(0.6); }
+  70% { transform: scale(1.08); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes ring {
+  0% { transform: scale(0.7); opacity: 0.7; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+
+.anim-rise { animation: rise 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.anim-float { animation: float 6s ease-in-out infinite; }
+.anim-drift { animation: drift 14s ease-in-out infinite; }
+.anim-fill { transform-origin: left; animation: fill 0.9s ease-out both; }
+.anim-pop { animation: pop 0.6s ease-out both; }
+.anim-ring { animation: ring 2.4s ease-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .anim-rise, .anim-float, .anim-drift, .anim-fill, .anim-pop, .anim-ring {
+    animation: none;
+  }
+}
+
 /* Dropdown lists ignore the select's transparent background, so give them theme colors. */
 select option {
   background-color: var(--card);

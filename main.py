@@ -4,12 +4,16 @@ from urllib.parse import urlsplit
 
 from anthropic import Anthropic
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Path, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Path, Request, Response
 from pydantic import BaseModel, Field, model_validator
 
 load_dotenv()
 
+import accounts  # noqa: E402
+import enquiries  # noqa: E402
+import fb  # noqa: E402
 import inbox  # noqa: E402
+import otp  # noqa: E402
 import sites  # noqa: E402
 from webfetch import FetchError, fetch_text, post_json  # noqa: E402
 
@@ -104,7 +108,7 @@ class Simulation(BaseModel):
 
 
 @app.post("/api/simulate", response_model=Simulation)
-def simulate(body: Simulate):
+def simulate(body: Simulate, uid: str = Depends(fb.ai_user)):
     try:
         res = client.messages.create(
             model=MODEL,
@@ -162,7 +166,7 @@ class Translated(BaseModel):
 
 
 @app.post("/api/translate", response_model=Translated)
-def translate(body: Translate):
+def translate(body: Translate, uid: str = Depends(fb.ai_user)):
     try:
         res = client.messages.create(
             model=MODEL,
@@ -187,7 +191,7 @@ def translate(body: Translate):
 
 
 @app.post("/api/refine", response_model=Refined)
-def refine(body: Refine):
+def refine(body: Refine, uid: str = Depends(fb.ai_user)):
     try:
         res = client.messages.create(
             model=MODEL,
@@ -243,7 +247,7 @@ def extra_context(body: Inquiry) -> str:
 
 
 @app.post("/api/triage", response_model=Triage)
-def triage(body: Inquiry):
+def triage(body: Inquiry, uid: str = Depends(fb.ai_user)):
     try:
         content: list[dict] = [
             {"type": "image", "source": {"type": "base64", "media_type": i.media_type, "data": i.data}}
@@ -318,7 +322,7 @@ class Profile(BaseModel):
 
 
 @app.post("/api/profile", response_model=Profile)
-def build_profile(body: ProfileSource):
+def build_profile(body: ProfileSource, uid: str = Depends(fb.ai_user)):
     try:
         text = body.text.strip()
         if body.url.strip():
@@ -364,7 +368,7 @@ class Gaps(BaseModel):
 
 
 @app.post("/api/gaps", response_model=Gaps)
-def find_gaps(body: GapsIn):
+def find_gaps(body: GapsIn, uid: str = Depends(fb.ai_user)):
     try:
         questions = "\n".join(f"- {q[:200]}" for q in body.questions)
         return ask_tool(
@@ -406,7 +410,7 @@ class Proposal(BaseModel):
 
 
 @app.post("/api/proposal", response_model=Proposal)
-def make_proposal(body: ProposalIn):
+def make_proposal(body: ProposalIn, uid: str = Depends(fb.ai_user)):
     try:
         return ask_tool(
             f"You write a project proposal for this business: {body.business}, in a "
@@ -443,12 +447,10 @@ class ConnectIn(BaseModel):
 
 
 class FetchIn(BaseModel):
-    account: AccountIn
     limit: int = Field(default=10, ge=1, le=20)
 
 
 class SendReply(BaseModel):
-    account: AccountIn
     to: str = Field(max_length=254)
     subject: str = Field(default="", max_length=200)
     body: str = Field(min_length=1, max_length=5000)
@@ -456,27 +458,83 @@ class SendReply(BaseModel):
     confirm: Literal[True]
 
 
-@app.post("/api/inbox/connect")
-def inbox_connect(body: ConnectIn):
+@app.post("/api/account/sync")
+def account_sync(profile: dict = Depends(fb.record_sign_in)):
+    return {"ok": True}
+
+
+class ProfileIn(BaseModel):
+    first_name: str = Field(min_length=1, max_length=50)
+    last_name: str = Field(min_length=1, max_length=50)
+
+
+@app.post("/api/account/profile")
+def account_profile(body: ProfileIn, decoded: dict = Depends(fb.token_user)):
+    return fb.save_name(decoded["uid"], body.first_name, body.last_name)
+
+
+class OtpVerifyIn(BaseModel):
+    code: str = Field(min_length=6, max_length=6)
+
+
+def _otp(job):
     try:
-        inbox.verify(body.account.build())
-        return {"ok": True}
+        return job()
+    except otp.OtpError as e:
+        raise HTTPException(e.status, str(e))
+
+
+@app.get("/api/otp/status")
+def otp_status(decoded: dict = Depends(fb.token_user)):
+    return _otp(lambda: otp.status(decoded["uid"]))
+
+
+@app.post("/api/otp/send")
+def otp_send(request: Request, decoded: dict = Depends(fb.token_user)):
+    return _otp(lambda: otp.send(decoded["uid"], client_ip(request)))
+
+
+@app.post("/api/otp/verify")
+def otp_verify(body: OtpVerifyIn, decoded: dict = Depends(fb.token_user)):
+    return _otp(lambda: otp.verify(decoded["uid"], body.code))
+
+
+@app.get("/api/inbox/account")
+def inbox_account(uid: str = Depends(fb.current_user)):
+    return {"account": accounts.info(uid)}
+
+
+@app.post("/api/inbox/connect")
+def inbox_connect(body: ConnectIn, uid: str = Depends(fb.current_user)):
+    if sites.limited(f"connect:{uid}", 10, 3600):
+        raise HTTPException(429, "Too many attempts. Try again later.")
+    try:
+        acc = body.account.build()
+        inbox.verify(acc)
+        accounts.save(uid, acc, body.account.imap_host, body.account.smtp_host)
+        return {"ok": True, "email": acc.email}
     except inbox.InboxError as e:
         raise HTTPException(400, str(e))
 
 
+@app.post("/api/inbox/disconnect")
+def inbox_disconnect(uid: str = Depends(fb.current_user)):
+    accounts.delete(uid)
+    return {"ok": True}
+
+
 @app.post("/api/inbox/fetch")
-def inbox_fetch(body: FetchIn):
+def inbox_fetch(body: FetchIn, uid: str = Depends(fb.current_user)):
     try:
-        return {"emails": inbox.fetch_unread(body.account.build(), body.limit)}
+        return {"emails": inbox.fetch_unread(accounts.load(uid), body.limit)}
     except inbox.InboxError as e:
         raise HTTPException(400, str(e))
 
 
 @app.post("/api/inbox/send")
-def inbox_send(body: SendReply):
+def inbox_send(body: SendReply, uid: str = Depends(fb.current_user)):
     try:
-        inbox.send_reply(body.account.build(), body.to, body.subject, body.body, body.in_reply_to)
+        inbox.send_reply(accounts.load(uid), body.to, body.subject, body.body, body.in_reply_to)
         return {"sent": True}
     except inbox.InboxError as e:
         raise HTTPException(400, str(e))
@@ -536,6 +594,26 @@ class WidgetSubmit(BaseModel):
     website: str = Field(default="", max_length=200)  # hidden field that only bots fill in
 
 
+class EnquiryIn(BaseModel):
+    name: str = Field(max_length=100)
+    email: str = Field(max_length=254)
+    phone: str = Field(default="", max_length=30)
+    category: str = Field(max_length=60)
+    service: str = Field(default="", max_length=60)
+    method: str = Field(default="", max_length=20)
+    message: str = Field(max_length=4000)
+    website: str = Field(default="", max_length=200)  # hidden field that only bots fill in
+
+
+@app.post("/api/contact-us")
+def contact_us(body: EnquiryIn, request: Request):
+    try:
+        enquiries.submit(client_ip(request), body.model_dump())
+    except enquiries.EnquiryError as e:
+        raise HTTPException(e.status, str(e))
+    return {"ok": True}
+
+
 @app.get("/api/widget/{site_id}/config")
 def widget_config(site_id: str = SITE_ID):
     try:
@@ -556,64 +634,72 @@ def widget_submit(body: WidgetSubmit, request: Request, site_id: str = SITE_ID):
         raise HTTPException(e.status, str(e))
 
 
+class SiteOptions(BaseModel):
+    title: str = Field(default="", max_length=60)
+    greeting: str = Field(default="", max_length=200)
+    button: str = Field(default="", max_length=30)
+    color: str = Field(default="", max_length=7)
+    position: str = Field(default="", max_length=5)
+
+
 class SiteCreate(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     origins: str = Field(default="", max_length=500)
+    options: SiteOptions | None = None
 
 
-class SiteAuth(BaseModel):
+class SiteRef(BaseModel):
     id: str = Field(max_length=40)
-    secret: str = Field(max_length=100)
 
 
-class SiteOrigins(SiteAuth):
+class SiteUpdate(SiteRef):
     origins: str = Field(default="", max_length=500)
+    options: SiteOptions | None = None
 
 
-@app.post("/api/sites/origins")
-def site_origins(body: SiteOrigins):
-    try:
-        return {"origins": sites.update_origins(body.id, body.secret, body.origins)}
-    except sites.SiteError as e:
-        raise HTTPException(e.status, str(e))
-
-
-class SitePull(SiteAuth):
+class SitePull(SiteRef):
     limit: int = Field(default=10, ge=1, le=20)
     include_pulled: bool = False
 
 
-@app.post("/api/sites")
-def site_create(body: SiteCreate, request: Request):
+def site_call(fn, *args):
     try:
-        return sites.create_site(body.name, body.origins, client_ip(request))
+        return fn(*args)
     except sites.SiteError as e:
         raise HTTPException(e.status, str(e))
+
+
+@app.get("/api/sites")
+def site_list(uid: str = Depends(fb.current_user)):
+    return {"sites": site_call(sites.list_sites, uid)}
+
+
+@app.post("/api/sites")
+def site_create(body: SiteCreate, request: Request, uid: str = Depends(fb.current_user)):
+    options = body.options.model_dump() if body.options else None
+    return site_call(sites.create_site, uid, body.name, body.origins, options, client_ip(request))
+
+
+@app.post("/api/sites/update")
+def site_update(body: SiteUpdate, uid: str = Depends(fb.current_user)):
+    options = body.options.model_dump() if body.options else None
+    return site_call(sites.update_site, uid, body.id, body.origins, options)
 
 
 @app.post("/api/sites/count")
-def site_count(body: SiteAuth):
-    try:
-        return {"waiting": sites.waiting_count(body.id, body.secret)}
-    except sites.SiteError as e:
-        raise HTTPException(e.status, str(e))
+def site_count(body: SiteRef, uid: str = Depends(fb.current_user)):
+    return {"waiting": site_call(sites.waiting_count, uid, body.id)}
 
 
 @app.post("/api/sites/pull")
-def site_pull(body: SitePull):
-    try:
-        return {"emails": sites.pull(body.id, body.secret, body.limit, body.include_pulled)}
-    except sites.SiteError as e:
-        raise HTTPException(e.status, str(e))
+def site_pull(body: SitePull, uid: str = Depends(fb.current_user)):
+    return {"emails": site_call(sites.pull, uid, body.id, body.limit, body.include_pulled)}
 
 
 @app.post("/api/sites/delete")
-def site_delete(body: SiteAuth):
-    try:
-        sites.delete_site(body.id, body.secret)
-        return {"ok": True}
-    except sites.SiteError as e:
-        raise HTTPException(e.status, str(e))
+def site_delete(body: SiteRef, uid: str = Depends(fb.current_user)):
+    site_call(sites.delete_site, uid, body.id)
+    return {"ok": True}
 
 
 class Notify(BaseModel):
@@ -623,8 +709,8 @@ class Notify(BaseModel):
 
 
 @app.post("/api/notify")
-def notify(body: Notify, request: Request):
-    if sites.limited(f"notify:{client_ip(request)}", 60, 3600):
+def notify(body: Notify, uid: str = Depends(fb.current_user)):
+    if sites.limited(f"notify:{uid}", 60, 3600):
         raise HTTPException(429, "Too many alerts. Try again later.")
     try:
         # "text" suits Slack and Teams, "content" suits Discord, "inquiry" suits Zapier or your own code.

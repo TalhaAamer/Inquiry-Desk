@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type RefObject } from "react";
+import { apiFetch } from "../lib/auth";
 import { isGmail, type EmailAccount } from "../lib/email";
 
 const field =
@@ -8,17 +9,14 @@ const field =
 
 interface Props {
   dialogRef: RefObject<HTMLDialogElement | null>;
-  onConnected: (account: EmailAccount, remember: boolean) => void;
-  remembered: boolean;
+  onConnected: (email: string) => void;
 }
 
-export default function EmailConnect({ dialogRef, onConnected, remembered }: Props) {
+export default function EmailConnect({ dialogRef, onConnected }: Props) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [imapHost, setImapHost] = useState("");
   const [smtpHost, setSmtpHost] = useState("");
-  const [choice, setChoice] = useState<boolean | null>(null);
-  const remember = choice ?? remembered;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -36,7 +34,7 @@ export default function EmailConnect({ dialogRef, onConnected, remembered }: Pro
     }
     setBusy(true);
     try {
-      const res = await fetch("/api/inbox/connect", {
+      const res = await apiFetch("/api/inbox/connect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ account }),
@@ -49,7 +47,7 @@ export default function EmailConnect({ dialogRef, onConnected, remembered }: Pro
             : "Check the email address and password.",
         );
       }
-      onConnected(account, remember);
+      onConnected(data.email ?? account.email);
       setPassword("");
       dialogRef.current?.close();
     } catch (e) {
@@ -162,21 +160,6 @@ export default function EmailConnect({ dialogRef, onConnected, remembered }: Pro
           </div>
         </details>
 
-        <label className="mt-4 flex items-start gap-2.5 text-sm">
-          <input
-            type="checkbox"
-            checked={remember}
-            onChange={(e) => setChoice(e.target.checked)}
-            className="mt-1 h-4 w-4 accent-[var(--accent)]"
-          />
-          <span className="text-muted">
-            <b className="font-semibold text-ink">Remember on this device</b>
-            <br />
-            Off: you stay connected only until you close this tab. Only turn it
-            on for a device you own.
-          </span>
-        </label>
-
         {error && (
           <p role="alert" className="mt-4 rounded-xl border border-hot px-3.5 py-2.5 text-sm text-hot">
             {error}
@@ -200,8 +183,9 @@ export default function EmailConnect({ dialogRef, onConnected, remembered }: Pro
           </button>
         </div>
         <p className="mt-3 text-xs text-muted">
-          Your password is sent to this app&apos;s server only to sign in to
-          your mailbox. It is never stored on the server.
+          Your password is sent to this app&apos;s server over a secure
+          connection and stored encrypted, only so your account can read and
+          send mail for you. Disconnect any time to delete it.
         </p>
       </form>
     </dialog>

@@ -1,3 +1,5 @@
+import { apiFetch } from "./auth";
+
 export interface EmailAccount {
   email: string;
   password: string;
@@ -5,46 +7,17 @@ export interface EmailAccount {
   smtp_host?: string;
 }
 
-const KEY = "inquiry-desk:email";
-
-// By default the app password lives only for this browser tab; "remember" keeps it on this device.
-export function loadAccount(): EmailAccount | null {
-  for (const store of [sessionStorage, localStorage]) {
-    try {
-      const raw = JSON.parse(store.getItem(KEY) ?? "null");
-      if (raw?.email && raw?.password) return raw as EmailAccount;
-    } catch {
-      // Ignore unreadable data.
-    }
-  }
-  return null;
+// The app password is kept encrypted on the server; the browser only learns the address.
+export async function loadAccount(): Promise<string | null> {
+  const res = await apiFetch("/api/inbox/account");
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data.account?.email ?? null;
 }
 
-export function saveAccount(account: EmailAccount, remember: boolean) {
-  clearAccount();
-  try {
-    (remember ? localStorage : sessionStorage).setItem(KEY, JSON.stringify(account));
-  } catch {
-    // Storage blocked: the account is only kept in memory for this visit.
-  }
+export async function disconnectAccount(): Promise<void> {
+  await apiFetch("/api/inbox/disconnect", { method: "POST" });
 }
-
-export function clearAccount() {
-  try {
-    sessionStorage.removeItem(KEY);
-    localStorage.removeItem(KEY);
-  } catch {
-    // Ignore.
-  }
-}
-
-export const isRemembered = () => {
-  try {
-    return localStorage.getItem(KEY) !== null;
-  } catch {
-    return false;
-  }
-};
 
 const GOOGLE = ["gmail.com", "googlemail.com"];
 export const isGmail = (email: string) =>

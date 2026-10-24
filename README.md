@@ -1,123 +1,44 @@
 # Inquiry Desk
 
-Paste or fetch customer messages and get a triage (category, urgency, mood, team), the missing questions to ask and a ready-to-edit reply written from your own business facts. A person always reviews before anything is sent.
-
-## Run it
-
-Backend (FastAPI):
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\pip install fastapi uvicorn anthropic python-dotenv pydantic
-.\.venv\Scripts\uvicorn main:app --reload
-```
-
-Before starting, create a file named `.env` next to `main.py` that contains your key:
-
-```
-ANTHROPIC_API_KEY=your-key-here
-```
-
-Frontend (Next.js, proxies `/api/*` to `127.0.0.1:8000`):
-
-```powershell
-cd frontend
-npm install
-npm run dev
-```
-
-Open http://localhost:3000.
+Inquiry Desk helps a business deal with customer messages faster. Paste or fetch a message and the AI works out what it is about, how urgent it is, how the customer feels and which team should handle it. It then writes a ready-to-edit reply from your own business facts. A person always reviews the reply before anything is sent.
 
 ## Features
 
 **Triage**
-- Category, urgency 1 to 5, sentiment, team, sender details, missing-info questions, screenshot reading.
-- Inbox mode: paste several messages separated by `---` lines and triage them all, ranked by urgency.
-- Reply deadline with an overdue alert, plus status tracking (New, Replied, Resolved), search, filters, stats and CSV export.
+- Category, urgency from 1 to 5, sentiment, team, sender details and the questions you still need to ask.
+- Reads screenshots of messages.
+- Inbox mode: paste several messages and triage them all, ranked by urgency.
+- Reply deadlines with an overdue alert, status tracking (New, Replied, Resolved), search, filters, stats and CSV export.
+
+**Replies**
+- Drafts a reply from your business profile and facts, with rewrite buttons and three versions to compare.
+- A customer reaction simulator shows how the customer is likely to take your reply.
+- Learns your writing style from the edits you make to drafts.
+- Instant proposals for new-project and partnership inquiries: scope, timeline, price (only if stated) and a proposal email.
+- Dictate a message with the microphone and have a reply read aloud.
 
 **Safety**
 - Privacy shield hides card numbers, ID numbers, passwords and API keys before text reaches the AI.
 - Reply guard flags prices, dates and durations that are not in your business facts or the customer's message.
 - Message X-ray highlights the exact phrases behind the urgency and mood scores.
-
-**Replies**
-- Rewrite buttons, three versions to compare, a customer reaction simulator, copy, open in your email app.
-- Learns your writing style: when you edit a draft and then copy or send it, the edit is stored and used as an example for later drafts (last 20 edits, in the browser; toggle or forget it in the Business profile).
-- Instant proposal for new-project and partnership inquiries: scope, timeline, price (only if stated) and a proposal email.
-- Voice: dictate a message with the microphone button, and have a reply read aloud (uses the browser's speech features).
+- Nothing is ever sent automatically.
 
 **Memory and knowledge**
-- Returning customers are recognised by email. The AI is told their history and you get a warning after repeat complaints.
-- Knowledge gap detector scans open questions your facts cannot answer and adds a labelled line to your facts for you to fill in.
-- Auto-fill your business profile from a website link or pasted price list.
+- Recognises returning customers by email and warns you after repeat complaints.
+- Finds questions your business facts cannot answer so you can fill the gaps.
+- Fills in your business profile from a website link or a pasted price list.
 
 **Connect to your business**
-- A shareable contact page and QR code for your business, plus an optional message button for your website with step-by-step setup for WordPress, Shopify, Wix, Squarespace and Webflow.
+- Your own email inbox (Gmail, Outlook, Yahoo, iCloud, Zoho or a custom domain): fetch unread emails and reply from the app.
+- A shareable contact page and QR code for your business.
+- An optional message button for your own website, with step-by-step setup for WordPress, Shopify, Wix, Squarespace and Webflow.
 - Slack, Teams, Discord or Zapier alerts for urgent inquiries.
-- Your own email inbox (Gmail, Outlook, Yahoo, iCloud, Zoho or custom).
-- Light, dark or system theme.
 
-## Connect your email (optional)
+**Accounts and security**
+- Sign up and sign in with Google or email and password, with first and last name.
+- Email verification with a 6-digit code that expires after 15 minutes.
+- Each person's data is private to their own account.
+- Light, dark or system theme, saved to your account.
 
-Each person connects their own mailbox from the app, with no server setup:
-
-1. Click **Connect email** above the message box.
-2. Enter your address and an **app password** (not your normal password).
-3. Click **Connect**. The app checks that it can read and send before saving anything.
-
-**Gmail:** turn on 2-Step Verification in your Google Account, open https://myaccount.google.com/apppasswords, create a password named "Inquiry Desk" and paste the 16 letters. Spaces are fine.
-
-Built-in providers: Gmail, Outlook/Hotmail/Live, Yahoo, iCloud and Zoho. For a work or custom domain, open **Advanced** in the connect form and enter your IMAP and SMTP server names (listed in your provider's help pages). IMAP access must be enabled on the account.
-
-- **Fetch unread emails** loads up to 10 unread messages into inbox mode. They are read without being marked as read.
-- **Send from my email** replies to the sender with a confirmation prompt each time. Nothing is ever sent automatically, and sending is limited to 20 emails per hour per account.
-- By default you stay connected until you close the tab. **Remember on this device** keeps the app password in this browser's storage, so only use it on a device you own. **Disconnect** removes it.
-- The app password is sent to the backend with each request only to sign in to the mailbox. The backend never stores it. When you deploy the app, serve it over HTTPS.
-
-## Let customers contact you (no website or code needed)
-
-Click **Set up** in **Contact page and alerts**, type your business name and click **Create**. You get:
-
-- **A contact page link** such as `https://YOUR-APP-ADDRESS/contact/abc123`. Share it anywhere customers can click: your email signature, Instagram or Facebook bio, WhatsApp, or a "Contact us" button on your site.
-- **A QR code** you can download and print for your shop, counter, tables or flyers.
-
-Customers write their name, email and message on that page, and it arrives in Inquiry Desk. Click **Fetch customer messages** to load the new ones into inbox mode and triage them like any other message.
-
-### Optional: a message button on your own website
-
-Open **Add a message button to your own website** on the contact page card, then:
-
-1. Enter your website address and click Save (the bare `yourcompany.com` works).
-2. Pick what your website is built with (WordPress, Shopify, Wix, Squarespace, Webflow or other). Plain-language steps appear for it.
-3. Copy the code and paste it where the steps say, or click **Email this to my web developer** to send them the steps and the code.
-
-The code is a single line that goes just before `</body>`:
-
-```html
-<script src="https://YOUR-APP-ADDRESS/widget.js" data-site="YOUR_SITE_ID" async></script>
-```
-
-A message button then appears in the corner of the site. **Preview the button** shows it on a sample page first.
-
-- **Customize:** heading, button text, greeting, brand color and corner are set in the dialog and added to the code as `data-title`, `data-button`, `data-greeting`, `data-color` and `data-position` (`left` or `right`).
-- **Allowed websites:** only the addresses you save can show the button. The hosted contact page always works.
-- **Spam protection:** a hidden field catches bots, each visitor is limited to 5 messages per 10 minutes, and each form to 300 per day.
-- **Private key:** creating a contact page gives your browser a secret that lets only you read its messages. It is stored in this browser, so keep that browser's data. The server keeps only a hash of it.
-- **Deploying:** the link and code use the address where your frontend is hosted, so they must be reachable by your customers over HTTPS. Messages are stored in `inquiry_desk.db` next to `main.py` for up to 30 days, so back that file up if it matters to you.
-
-## Alerts in Slack, Teams or Discord
-
-In **Contact page and alerts**, paste an incoming-webhook address (Slack, Microsoft Teams, Discord, Zapier, Make or your own endpoint) and turn on **Send alerts**. You get a short message when an inquiry reaches the urgency you choose, or when it needs a human check. It contains the summary, urgency, sender and next step, never the full message. Use **Send a test alert** to check the connection. Webhooks must use `https` and point to a public address.
-
-The alert is posted as JSON with `text` (Slack and Teams), `content` (Discord) and an `inquiry` object (category, urgency, sentiment, team, summary, next step, sender, needs review) for automations.
-
-## Light and dark mode
-
-Use the sun, moon and screen buttons at the top right to choose Light, Dark or System (follows your device). Your choice is remembered.
-
-## Notes on safety and privacy
-
-- History, settings, learned style, customer memory, website form keys and (if you choose to remember it) the email app password are stored in your browser. The server stores only website form messages (until you fetch and for 30 days) and the hash of each form's key.
-- Mail server names you enter must be public addresses; local and private network addresses are refused.
-- The website auto-fill and webhook alerts only talk to public addresses and refuse private or local ones. Sites that build their pages entirely with JavaScript show almost no text to auto-fill, so for those paste your menu, prices and policies instead.
-- The AI can be wrong. Check the draft, the Reply guard and the "needs review" flag before sending.
+**Public website**
+- Home, Services (with a detail page for each service), About us and Contact us pages, with a contact form for visitors.

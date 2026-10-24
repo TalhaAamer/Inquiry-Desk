@@ -1,3 +1,6 @@
+import { getDoc } from "firebase/firestore";
+import { apiFetch } from "./auth";
+import { later, put, userDoc } from "./cloud";
 import type { Triage } from "./types";
 
 export interface WidgetOptions {
@@ -10,10 +13,10 @@ export interface WidgetOptions {
 
 export interface SiteConn {
   id: string;
-  secret: string;
   name: string;
   origins: string[];
   options: WidgetOptions;
+  waiting?: number;
 }
 
 export interface AlertSettings {
@@ -38,42 +41,24 @@ export const DEFAULT_ALERTS: AlertSettings = {
   onReview: true,
 };
 
-const SITES_KEY = "inquiry-desk:sites";
-const ALERTS_KEY = "inquiry-desk:alerts";
-
-function read<T>(key: string, fallback: T): T {
-  try {
-    return JSON.parse(localStorage.getItem(key) ?? "null") ?? fallback;
-  } catch {
-    return fallback;
-  }
+// Contact pages live on the server, tied to your account.
+export async function loadSites(): Promise<SiteConn[]> {
+  const res = await apiFetch("/api/sites");
+  if (!res.ok) throw new Error("Could not load your contact pages.");
+  const data = await res.json();
+  return (data.sites as SiteConn[]).map((s) => ({
+    ...s,
+    options: { ...DEFAULT_OPTIONS, ...s.options },
+  }));
 }
 
-function write(key: string, value: unknown) {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // Storage blocked: changes last only for this visit.
-  }
+export async function loadAlerts(): Promise<AlertSettings> {
+  const snap = await getDoc(userDoc("settings", "alerts"));
+  return { ...DEFAULT_ALERTS, ...(snap.data() as Partial<AlertSettings> | undefined) };
 }
 
-export function loadSites(): SiteConn[] {
-  const raw = read<SiteConn[]>(SITES_KEY, []);
-  return Array.isArray(raw)
-    ? raw
-        .filter((s) => s?.id && s?.secret)
-        .map((s) => ({ ...s, options: { ...DEFAULT_OPTIONS, ...s.options } }))
-    : [];
-}
-
-export const saveSites = (sites: SiteConn[]) => write(SITES_KEY, sites);
-
-export const loadAlerts = (): AlertSettings => ({
-  ...DEFAULT_ALERTS,
-  ...read<Partial<AlertSettings>>(ALERTS_KEY, {}),
-});
-
-export const saveAlerts = (a: AlertSettings) => write(ALERTS_KEY, a);
+export const saveAlerts = (a: AlertSettings) =>
+  later("alerts", 800, () => put(userDoc("settings", "alerts"), a));
 
 const attr = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
