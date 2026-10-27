@@ -1,7 +1,7 @@
 "use client";
 
 import { onAuthStateChanged, signOut as fbSignOut, type User } from "firebase/auth";
-import { getDoc, setDoc } from "firebase/firestore";
+import { deleteField, getDoc, setDoc } from "firebase/firestore";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { flushAll, setUid, userDoc } from "./cloud";
 import { auth } from "./firebase";
@@ -16,6 +16,12 @@ interface AuthState {
   recheckVerified: () => Promise<boolean>;
   theme: Theme;
   setTheme: (t: Theme) => void;
+  // The picture to show: an uploaded one if there is one, otherwise the Google account's.
+  photo: string | null;
+  // Pass null to remove the uploaded picture.
+  savePhoto: (dataUrl: string | null) => Promise<void>;
+  // Re-reads the account from Firebase after the name or phone number changes.
+  refreshUser: () => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -26,6 +32,9 @@ const Ctx = createContext<AuthState>({
   recheckVerified: async () => false,
   theme: "light",
   setTheme: () => {},
+  photo: null,
+  savePhoto: async () => {},
+  refreshUser: async () => {},
   signOut: async () => {},
 });
 
@@ -51,6 +60,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [verified, setVerified] = useState(false);
   const [theme, setThemeState] = useState<Theme>("light");
+  const [uploaded, setUploaded] = useState<string | null>(null);
+  const [rev, setRev] = useState(0);
 
   useEffect(() => {
     // Sync the toggle with the cookie straight away, before Firebase finishes loading.
@@ -68,12 +79,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       setVerified(ok);
       setUser(next);
+      setUploaded(null);
       if (next) {
         // Records who signed in on the account document. Failure must not block sign-in.
         void apiFetch("/api/account/sync", { method: "POST" }).catch(() => {});
         if (ok) {
           try {
             const snap = await getDoc(userDoc());
+            const savedPhoto = snap.data()?.photo;
+            if (typeof savedPhoto === "string" && savedPhoto.startsWith("data:image/")) {
+              setUploaded(savedPhoto);
+            }
             const saved = snap.data()?.theme;
             if (saved === "light" || saved === "dark" || saved === "system") {
               setThemeState(saved);
@@ -106,14 +122,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const savePhoto = useCallback(async (dataUrl: string | null) => {
+    await setDoc(
+      userDoc(),
+      { photo: dataUrl ?? deleteField(), updatedAt: Date.now() },
+      { merge: true },
+    );
+    setUploaded(dataUrl);
+  }, []);
+
+  const refreshUser = useCallback(async () => {
+    await auth.currentUser?.reload();
+    setRev((n) => n + 1);
+  }, []);
+
   const signOut = useCallback(async () => {
     await flushAll();
     await fbSignOut(auth);
   }, []);
 
+  const photo = uploaded ?? user?.photoURL ?? null;
   const value = useMemo(
-    () => ({ user, loading, verified, recheckVerified, theme, setTheme, signOut }),
-    [user, loading, verified, recheckVerified, theme, setTheme, signOut],
+    () => ({
+      user,
+      loading,
+      verified,
+      recheckVerified,
+      theme,
+      setTheme,
+      photo,
+      savePhoto,
+      refreshUser,
+      signOut,
+    }),
+    // rev makes the context change after a reload, since the user object keeps the same identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [user, rev, loading, verified, recheckVerified, theme, setTheme, photo, savePhoto, refreshUser, signOut],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

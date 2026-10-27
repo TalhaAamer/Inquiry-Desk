@@ -7,6 +7,7 @@ import email
 import imaplib
 import re
 import smtplib
+import socket
 import time
 from dataclasses import dataclass
 from email.message import EmailMessage
@@ -114,11 +115,36 @@ def _body(msg: email.message.EmailMessage) -> str:
     return _clean("\n".join(lines))[:MAX_BODY]
 
 
+def _pin(host: str, port: int) -> str:
+    try:
+        return _public_ip(host, port)
+    except FetchError:
+        raise InboxError("That mail server address is not allowed or could not be found.")
+
+
+class _PinnedSMTP(smtplib.SMTP):
+    # Connects to the address that was just checked, so DNS cannot change the target afterwards.
+    def _get_socket(self, host, port, timeout):
+        return socket.create_connection((_pin(host, port), port), timeout)
+
+
+class _PinnedSMTP_SSL(smtplib.SMTP_SSL):
+    def _get_socket(self, host, port, timeout):
+        sock = socket.create_connection((_pin(host, port), port), timeout)
+        return self.context.wrap_socket(sock, server_hostname=self._host)
+
+
+class _PinnedIMAP(imaplib.IMAP4_SSL):
+    def _create_socket(self, timeout):
+        sock = socket.create_connection((_pin(self.host, self.port), self.port), timeout)
+        return self.ssl_context.wrap_socket(sock, server_hostname=self.host)
+
+
 def _smtp(acc: Account):
     if acc.smtp_port == 465:
-        server = smtplib.SMTP_SSL(acc.smtp_host, acc.smtp_port, timeout=15)
+        server = _PinnedSMTP_SSL(acc.smtp_host, acc.smtp_port, timeout=15)
     else:
-        server = smtplib.SMTP(acc.smtp_host, acc.smtp_port, timeout=15)
+        server = _PinnedSMTP(acc.smtp_host, acc.smtp_port, timeout=15)
         server.starttls()
     server.login(acc.email, acc.password)
     return server
@@ -127,7 +153,7 @@ def _smtp(acc: Account):
 def verify(acc: Account) -> None:
     """Check that both reading and sending work, so problems show up at connect time."""
     try:
-        with imaplib.IMAP4_SSL(acc.imap_host, acc.imap_port, timeout=15) as imap:
+        with _PinnedIMAP(acc.imap_host, acc.imap_port, timeout=15) as imap:
             imap.login(acc.email, acc.password)
         with _smtp(acc):
             pass
@@ -138,7 +164,7 @@ def verify(acc: Account) -> None:
 def fetch_unread(acc: Account, limit: int = 10) -> list[dict]:
     limit = max(1, min(limit, 20))
     try:
-        with imaplib.IMAP4_SSL(acc.imap_host, acc.imap_port, timeout=15) as imap:
+        with _PinnedIMAP(acc.imap_host, acc.imap_port, timeout=15) as imap:
             imap.login(acc.email, acc.password)
             imap.select("INBOX", readonly=True)
             status, data = imap.search(None, "UNSEEN")

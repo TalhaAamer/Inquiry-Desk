@@ -90,7 +90,17 @@ class Triage(BaseModel):
     )
 
 
-app = FastAPI(title="Inquiry Desk")
+# The interactive API docs list every route, so they are switched off. The frontend does not use them.
+app = FastAPI(title="Inquiry Desk", docs_url=None, redoc_url=None, openapi_url=None)
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault("Cache-Control", "no-store")
+    return response
 
 
 class Simulate(BaseModel):

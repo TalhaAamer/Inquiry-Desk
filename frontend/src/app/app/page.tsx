@@ -49,6 +49,7 @@ import {
   type SiteConn,
 } from "../lib/integrations";
 import ThemeToggle from "../components/ThemeToggle";
+import ProfileButton from "../components/ProfileButton";
 import type { HistoryItem, Img, InboxEmail, PriorContact, Triage } from "../lib/types";
 
 const SAMPLES: Record<string, string> = {
@@ -698,6 +699,7 @@ export default function Home() {
                 : "Saved to your account"}
           </span>
           <ThemeToggle />
+          <ProfileButton />
           <button
             type="button"
             onClick={async () => {
