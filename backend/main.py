@@ -552,8 +552,13 @@ def inbox_send(body: SendReply, uid: str = Depends(fb.current_user)):
 
 def client_ip(request: Request) -> str:
     host = request.client.host if request.client else "unknown"
+    if os.getenv("VERCEL"):
+        # Vercel sets this header itself and overwrites any value sent by the client.
+        real = request.headers.get("x-vercel-forwarded-for") or request.headers.get("x-real-ip", "")
+        if real:
+            return real.split(",")[0].strip()[:64]
     # Behind the local Next.js proxy every request comes from loopback, so trust its forwarded address.
-    if host in ("127.0.0.1", "::1"):
+    elif host in ("127.0.0.1", "::1"):
         forwarded = request.headers.get("x-forwarded-for", "")
         if forwarded:
             return forwarded.split(",")[0].strip()[:64]

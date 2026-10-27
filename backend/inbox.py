@@ -14,11 +14,11 @@ from email.message import EmailMessage
 from email.policy import default
 from email.utils import parseaddr
 
+from ratelimit import limited
 from webfetch import FetchError, _public_ip, html_to_text
 
 MAX_BODY = 3800
 SEND_LIMIT_PER_HOUR = 20
-_sent: dict[str, list[float]] = {}
 ADDRESS = re.compile(r"^[^@\s<>,;]{1,64}@[^@\s<>,;]{1,255}\.[^@\s<>,;]{2,}$")
 HOSTNAME = re.compile(r"^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$")
 
@@ -198,9 +198,7 @@ def send_reply(acc: Account, to: str, subject: str, body: str, in_reply_to: str 
     to = to.strip()
     if not ADDRESS.match(to):
         raise InboxError("That is not a valid email address.")
-    now = time.time()
-    recent = [t for t in _sent.get(acc.email.lower(), []) if now - t < 3600]
-    if len(recent) >= SEND_LIMIT_PER_HOUR:
+    if limited(f"send:{acc.email.lower()}", SEND_LIMIT_PER_HOUR, 3600):
         raise InboxError("Hourly sending limit reached. Try again later.")
 
     msg = EmailMessage()
@@ -220,4 +218,3 @@ def send_reply(acc: Account, to: str, subject: str, body: str, in_reply_to: str 
             server.send_message(msg)
     except (smtplib.SMTPException, OSError) as e:
         raise InboxError(_friendly(e))
-    _sent[acc.email.lower()] = recent + [now]

@@ -1,0 +1,7 @@
+anthropic==1.12.1
+cryptography==50.0.2
+fastapi==0.142.4
+firebase-admin==7.7.0
+pydantic==2.13.5
+python-dotenv==1.2.4
+uvicorn==0.54.0

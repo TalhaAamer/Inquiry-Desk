@@ -1,5 +1,7 @@
 """Firebase Admin setup and sign-in checks for the API."""
 
+import base64
+import json
 import os
 import re
 import time
@@ -19,7 +21,15 @@ def init() -> firebase_admin.App:
     global _app
     if _app is None:
         path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
-        cred = credentials.Certificate(path) if path else credentials.ApplicationDefault()
+        raw = os.getenv("FIREBASE_SERVICE_ACCOUNT", "").strip()
+        if raw:
+            if not raw.startswith("{"):
+                raw = base64.b64decode(raw).decode()
+            cred = credentials.Certificate(json.loads(raw))
+        elif path:
+            cred = credentials.Certificate(path)
+        else:
+            cred = credentials.ApplicationDefault()
         options = {"projectId": os.getenv("FIREBASE_PROJECT_ID")} if os.getenv("FIREBASE_PROJECT_ID") else None
         _app = firebase_admin.initialize_app(cred, options)
     return _app
