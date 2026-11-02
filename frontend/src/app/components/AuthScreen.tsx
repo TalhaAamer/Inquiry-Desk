@@ -9,10 +9,12 @@ import {
 } from "firebase/auth";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useAuth, apiFetch } from "../lib/auth";
 import { auth } from "../lib/firebase";
+import { T } from "../lib/siteconfig";
 import ThemeToggle from "./ThemeToggle";
+import TurnstileWidget from "./TurnstileWidget";
 
 const field =
   "w-full rounded-xl border border-line bg-card px-3.5 py-2.5 text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
@@ -20,6 +22,7 @@ const field =
 const MIN_NEW_PASSWORD = 8;
 const RESET_WAIT = 30;
 const BAD_NAME = /[0-9<>{}[\]()\\/@:;|"=+*%$#!?^~_&\u0000-\u001f]/;
+type AuthAttempt = "signin" | "signup" | "reset" | "google";
 
 function nameProblem(value: string, label: string): string {
   const v = value.trim().replace(/\s+/g, " ");
@@ -107,10 +110,10 @@ export function Illustration() {
       <div className="relative mx-auto w-full max-w-md">
         <div className="anim-rise">
           <h2 className="font-display text-3xl font-bold leading-tight text-ink xl:text-4xl">
-            Never miss an urgent customer message.
+            <T id="auth.heroTitle" />
           </h2>
           <p className="mt-3 text-muted">
-            Every message is sorted by urgency, with a reply ready to review.
+            <T id="auth.heroText" />
           </p>
         </div>
 
@@ -273,13 +276,23 @@ export default function AuthScreen({ mode }: { mode: "in" | "up" }) {
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [wait, setWait] = useState(0);
+  const [trap, setTrap] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const [turnstileReset, setTurnstileReset] = useState(0);
   const emailId = useId();
   const firstId = useId();
   const lastId = useId();
   const emailGuard = useNoAutofill();
+  const redirecting = useRef(false);
   // Wait for sign-up to finish saving the name before leaving, so the next screen already knows it.
   useEffect(() => {
-    if (!loading && user && !busy) router.replace(verified ? "/app" : "/verify");
+    if (loading || !user || busy || redirecting.current) return;
+    redirecting.current = true;
+    if (!verified) {
+      router.replace("/verify");
+      return;
+    }
+    router.replace("/app");
   }, [user, loading, verified, busy, router]);
 
   // Coming back with the browser's Back button must not show old entries.
@@ -309,21 +322,50 @@ export default function AuthScreen({ mode }: { mode: "in" | "up" }) {
     try {
       await job();
     } catch (e) {
-      setError(explain(e));
+      setError(e instanceof Error && !("code" in e) ? e.message : explain(e));
     } finally {
       setBusy(false);
     }
   }
 
+  async function allowAttempt(action: AuthAttempt): Promise<boolean> {
+    let res: Response;
+    let body: Record<string, unknown>;
+    try {
+      res = await fetch("/api/auth/attempt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action,
+          email: email.trim(),
+          website: trap,
+          turnstile_token: turnstileToken,
+        }),
+      });
+      body = await res.json().catch(() => ({}));
+    } finally {
+      setTurnstileToken("");
+      setTurnstileReset((n) => n + 1);
+    }
+    if (!res.ok) {
+      throw new Error(typeof body.detail === "string" ? body.detail : "Please try again later.");
+    }
+    return body.allowed === true;
+  }
+
   // Google has its own handling: a popup left open or closed must never lock the buttons,
   // and clicking again simply restarts the popup (Firebase cancels the earlier one).
   async function google() {
+    setBusy(true);
     setError("");
     setInfo("");
     try {
+      if (!(await allowAttempt("google"))) return;
       await signInWithPopup(auth, new GoogleAuthProvider());
     } catch (e) {
-      setError(explain(e));
+      setError(e instanceof Error && !("code" in e) ? e.message : explain(e));
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -345,6 +387,7 @@ export default function AuthScreen({ mode }: { mode: "in" | "up" }) {
       }
     }
     run(async () => {
+      if (!(await allowAttempt(mode === "in" ? "signin" : "signup"))) return;
       if (mode === "in") {
         await signInWithEmailAndPassword(auth, email.trim(), password);
         return;
@@ -365,8 +408,17 @@ export default function AuthScreen({ mode }: { mode: "in" | "up" }) {
     setError("");
     setInfo("");
     try {
+      if (!(await allowAttempt("reset"))) {
+        setBusy(false);
+        return;
+      }
       await sendPasswordResetEmail(auth, email.trim());
     } catch (err) {
+      if (err instanceof Error && !("code" in err)) {
+        setError(err.message);
+        setBusy(false);
+        return;
+      }
       const code = (err as { code?: string })?.code;
       // An unknown address gets the same reply, so the form cannot be used to find out who has an account.
       if (code !== "auth/user-not-found") {
@@ -427,11 +479,20 @@ export default function AuthScreen({ mode }: { mode: "in" | "up" }) {
         <div className="grid flex-1 place-items-center py-8">
           <div className="w-full max-w-md">
             <p className="mb-6 text-center font-display text-2xl font-bold tracking-tight">
-              Inquiry Desk
+              <T id="brand.name" />
             </p>
             <div className="rounded-[20px] border border-line bg-card p-6 shadow-sm sm:p-8">
               {resetting ? (
                 <form onSubmit={sendReset} className="space-y-3">
+                  <input
+                    name="website"
+                    value={trap}
+                    onChange={(e) => setTrap(e.target.value)}
+                    tabIndex={-1}
+                    autoComplete="off"
+                    aria-hidden="true"
+                    className="absolute -left-[9999px] h-px w-px opacity-0"
+                  />
                   <h1 className="font-display text-2xl font-semibold">Reset your password</h1>
                   <p className="pb-2 text-sm text-muted">
                     Enter the email you signed up with and we will send you a link to choose a
@@ -452,6 +513,11 @@ export default function AuthScreen({ mode }: { mode: "in" | "up" }) {
                       className={`${field} mt-1.5`}
                     />
                   </div>
+                  <TurnstileWidget
+                    action="auth"
+                    onToken={setTurnstileToken}
+                    resetKey={turnstileReset}
+                  />
                   {error && (
                     <p role="alert" className="text-sm text-hot">
                       {error}
@@ -486,17 +552,23 @@ export default function AuthScreen({ mode }: { mode: "in" | "up" }) {
               ) : (
                 <>
                   <h1 className="font-display text-2xl font-semibold">
-                    {mode === "in" ? "Welcome back" : "Create your account"}
+                    {mode === "in" ? <T id="auth.signInTitle" /> : <T id="auth.signUpTitle" />}
                   </h1>
                   <p className="mb-5 mt-1 text-sm text-muted">
-                    Your messages, profile and contact pages are saved to your account, so
-                    nothing is lost when you switch device.
+                    <T id="auth.intro" />
                   </p>
+
+                  <TurnstileWidget
+                    action="auth"
+                    onToken={setTurnstileToken}
+                    resetKey={turnstileReset}
+                  />
 
                   <button
                     type="button"
                     onClick={google}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-line px-4 py-2.5 font-semibold hover:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                    disabled={busy}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-line px-4 py-2.5 font-semibold hover:border-accent disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                   >
                     <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden>
                       <path fill="#4285F4" d="M22.5 12.2c0-.8-.1-1.5-.2-2.2H12v4.3h5.9a5 5 0 0 1-2.2 3.3v2.7h3.5c2.1-1.9 3.3-4.7 3.3-8.1z" />
@@ -504,7 +576,7 @@ export default function AuthScreen({ mode }: { mode: "in" | "up" }) {
                       <path fill="#FBBC05" d="M6 14.1a6.6 6.6 0 0 1 0-4.2V7.1H2.4a11 11 0 0 0 0 9.8L6 14.1z" />
                       <path fill="#EA4335" d="M12 5.4c1.6 0 3 .6 4.2 1.6l3.1-3.1A11 11 0 0 0 2.4 7.1L6 9.9c.8-2.6 3.2-4.5 6-4.5z" />
                     </svg>
-                    Continue with Google
+                    <T id="auth.google" />
                   </button>
 
                   <div className="my-5 flex items-center gap-3 text-xs text-muted" aria-hidden>
@@ -514,6 +586,15 @@ export default function AuthScreen({ mode }: { mode: "in" | "up" }) {
                   </div>
 
                   <form onSubmit={submit} className="space-y-3">
+                    <input
+                      name="website"
+                      value={trap}
+                      onChange={(e) => setTrap(e.target.value)}
+                      tabIndex={-1}
+                      autoComplete="off"
+                      aria-hidden="true"
+                      className="absolute -left-[9999px] h-px w-px opacity-0"
+                    />
                     {mode === "up" && (
                       <div className="grid gap-3 sm:grid-cols-2">
                         <div>
@@ -596,7 +677,7 @@ export default function AuthScreen({ mode }: { mode: "in" | "up" }) {
                       disabled={busy}
                       className="w-full rounded-xl bg-accent py-3 font-semibold text-on disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                     >
-                      {busy ? "Please wait…" : mode === "in" ? "Sign in" : "Create account"}
+                      {busy ? "Please wait…" : mode === "in" ? <T id="auth.signInButton" /> : <T id="auth.signUpButton" />}
                     </button>
                   </form>
 
@@ -605,7 +686,7 @@ export default function AuthScreen({ mode }: { mode: "in" | "up" }) {
                       href={mode === "in" ? "/signup" : "/login"}
                       className="font-semibold text-accent hover:underline"
                     >
-                      {mode === "in" ? "New here? Create an account" : "Have an account? Sign in"}
+                      {mode === "in" ? <T id="auth.toSignUp" /> : <T id="auth.toSignIn" />}
                     </Link>
                     {mode === "in" && (
                       <button

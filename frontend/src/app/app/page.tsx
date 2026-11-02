@@ -49,6 +49,7 @@ import {
   type SiteConn,
 } from "../lib/integrations";
 import ThemeToggle from "../components/ThemeToggle";
+import { T, useFeature, useText } from "../lib/siteconfig";
 import ProfileButton from "../components/ProfileButton";
 import type { HistoryItem, Img, InboxEmail, PriorContact, Triage } from "../lib/types";
 
@@ -149,6 +150,18 @@ export default function Home() {
   const [customerCount, setCustomerCount] = useState(0);
   const [account, setAccount] = useState<string | null>(null);
   const { user, loading: authLoading, verified, signOut } = useAuth();
+  const fScreens = useFeature("screenshots");
+  const fInbox = useFeature("inboxMode");
+  const fDictate = useFeature("dictation");
+  const fEmail = useFeature("emailInbox");
+  const fPages = useFeature("contactPages");
+  const fSamples = useFeature("samples");
+  const fGaps = useFeature("knowledgeGaps");
+  const fStyle = useFeature("writingStyle");
+  const messagePlaceholder = useText("app.messagePlaceholder");
+  const sampleLabel = useText("app.sampleLabel");
+  const triageLabel = useText("app.triageButton");
+  const triageBusy = useText("app.triageLoading");
   const router = useRouter();
   const [leaving, setLeaving] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("saved");
@@ -231,7 +244,7 @@ export default function Home() {
 
   // Remembers how the owner rewrote a draft, so later drafts sound like them.
   function learnVoice(original: string, edited: string) {
-    if (!voice.enabled || !result || !isRealEdit(original, edited)) return;
+    if (!fStyle || !voice.enabled || !result || !isRealEdit(original, edited)) return;
     const next = addExample(voice, { category: result.category, original, edited });
     if (next !== voice) updateVoice(next);
   }
@@ -296,6 +309,7 @@ export default function Home() {
   }
 
   async function addFiles(files: File[]) {
+    if (!fScreens) return;
     const valid = files.filter((f) => ACCEPTED.includes(f.type));
     if (files.length && !valid.length) {
       setError("Use PNG, JPG, WebP or GIF images.");
@@ -322,12 +336,12 @@ export default function Home() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         message: text,
-        images: imgs.map(({ media_type, data }) => ({ media_type, data })),
+        images: fScreens ? imgs.map(({ media_type, data }) => ({ media_type, data })) : [],
         business,
         knowledge,
         tone,
         language,
-        style_examples: pickExamples(voice).map(({ original, edited }) => ({
+        style_examples: (fStyle ? pickExamples(voice) : []).map(({ original, edited }) => ({
           original,
           edited,
         })),
@@ -392,7 +406,7 @@ export default function Home() {
   }
 
   const inboxParts = splitInbox(message);
-  const isBatch = inboxParts.length >= 2;
+  const isBatch = fInbox && inboxParts.length >= 2;
 
   async function triageAll() {
     if (mode === "auto" || batch) return;
@@ -678,10 +692,10 @@ export default function Home() {
           </div>
           <div>
             <h1 className="font-display text-3xl font-bold leading-none tracking-tight sm:text-4xl">
-              Inquiry Desk
+              <T id="brand.name" />
             </h1>
             <p className="mt-1.5 text-muted">
-              Sort customer messages by urgency, then review a ready-made reply.
+              <T id="app.subtitle" />
             </p>
           </div>
         </div>
@@ -775,7 +789,7 @@ export default function Home() {
                 className={`h-2.5 w-2.5 shrink-0 rounded-full ${profileSet ? "bg-ok" : "bg-warn"}`}
               />
               <span>
-                <b className="block text-sm font-semibold">Business profile</b>
+                <b className="block text-sm font-semibold"><T id="app.profileTitle" /></b>
                 <span className="text-sm text-muted">
                   {profileSet
                     ? "Set. Replies use your business facts."
@@ -788,10 +802,11 @@ export default function Home() {
             </span>
           </button>
 
+          {fEmail && (
           <div className="mb-5 rounded-xl border border-line px-4 py-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="min-w-0">
-                <b className="block text-sm font-semibold">Email inbox</b>
+                <b className="block text-sm font-semibold"><T id="app.emailTitle" /></b>
                 <span className="wrap-break-word text-sm text-muted">
                   {account
                     ? `Connected as ${account}`
@@ -834,7 +849,9 @@ export default function Home() {
               )}
             </div>
           </div>
+          )}
 
+          {fPages && (
           <div className="mb-5 rounded-xl border border-line px-4 py-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="min-w-0">
@@ -870,9 +887,10 @@ export default function Home() {
               </span>
             </div>
           </div>
+          )}
 
           <h2 className="mb-4 font-display text-lg font-semibold">
-            Customer message
+            <T id="app.messageTitle" />
           </h2>
           <textarea
             aria-label="Customer message"
@@ -895,7 +913,7 @@ export default function Home() {
                 else triage();
               }
             }}
-            placeholder="Paste an email or contact-form message here"
+            placeholder={messagePlaceholder}
             maxLength={MAX_BATCH * 4000}
             className={`${field} min-h-36 resize-y`}
           />
@@ -928,7 +946,7 @@ export default function Home() {
           <div className="mt-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-muted">
             <span className="flex items-center gap-3">
               <span>Ctrl+Enter to triage</span>
-              {dict.supported && (
+              {dict.supported && fDictate && (
                 <button
                   type="button"
                   onClick={toggleMic}
@@ -979,10 +997,10 @@ export default function Home() {
           )}
 
           <div
-            className="my-2 flex flex-wrap items-center gap-2"
+            className={`my-2 flex flex-wrap items-center gap-2 ${fSamples ? "" : "hidden"}`}
             aria-label="Sample messages"
           >
-            <span className="w-full text-sm text-muted sm:w-auto">Try a sample:</span>
+            <span className="w-full text-sm text-muted sm:w-auto">{sampleLabel}</span>
             {Object.entries(SAMPLES).map(([name, text]) => (
               <button
                 key={name}
@@ -1015,8 +1033,8 @@ export default function Home() {
               addFiles(Array.from(e.dataTransfer.files));
             }}
             className={`rounded-xl border border-dashed p-3 text-center text-sm text-muted transition ${
-              drag ? "border-accent bg-accent/10" : "border-line"
-            }`}
+              fScreens ? "" : "hidden"
+            } ${drag ? "border-accent bg-accent/10" : "border-line"}`}
           >
             <input
               ref={fileRef}
@@ -1069,7 +1087,7 @@ export default function Home() {
 
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
             <label className="text-sm font-medium text-muted">
-              Reply tone
+              <T id="app.toneLabel" />
               <select
                 value={tone}
                 onChange={(e) => setTone(e.target.value)}
@@ -1081,7 +1099,7 @@ export default function Home() {
               </select>
             </label>
             <label className="text-sm font-medium text-muted">
-              Reply language
+              <T id="app.languageLabel" />
               <select
                 value={language}
                 onChange={(e) => setLanguage(e.target.value)}
@@ -1104,7 +1122,7 @@ export default function Home() {
               id="mode-label"
               className="mb-1.5 block text-sm font-medium text-muted"
             >
-              Reply mode
+              <T id="app.modeLabel" />
             </span>
             <div
               role="radiogroup"
@@ -1172,13 +1190,13 @@ export default function Home() {
             }
             className="mt-5 w-full rounded-xl bg-accent py-3.5 font-semibold text-on transition active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
-            {loading ? "Reading message…" : "Triage message"}
+            {loading ? triageBusy : triageLabel}
           </button>
         </section>
 
         <section aria-live="polite" className={`${card} flex flex-col`}>
           <h2 className="mb-4 font-display text-lg font-semibold">
-            Triage result
+            <T id="app.resultTitle" />
           </h2>
           {alertNote && (
             <p
@@ -1337,7 +1355,7 @@ export default function Home() {
         onStatus={(id, status) => patchHistory(id, { status })}
       />
 
-      <KnowledgeGaps items={history} knowledge={knowledge} onAdd={addGapLabel} />
+      {fGaps && <KnowledgeGaps items={history} knowledge={knowledge} onAdd={addGapLabel} />}
 
       <IntegrationsDialog
         dialogRef={intRef}
@@ -1423,7 +1441,7 @@ export default function Home() {
               Optional. Replies only state prices and policies that appear here.
             </span>
           </label>
-          <div className="mt-4 rounded-xl border border-line px-3.5 py-3 text-sm">
+          <div className={`mt-4 rounded-xl border border-line px-3.5 py-3 text-sm ${fStyle ? "" : "hidden"}`}>
             <label className="flex items-start gap-2.5">
               <input
                 type="checkbox"

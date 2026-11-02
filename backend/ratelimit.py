@@ -11,6 +11,8 @@ import time
 from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
 
+from fastapi import HTTPException
+
 _lock = threading.Lock()
 _hits: dict[str, deque] = defaultdict(deque)
 
@@ -60,10 +62,14 @@ def _firestore(key: str, limit: int, window: int) -> bool:
     return run(client.transaction())
 
 
-def limited(key: str, limit: int, window: int) -> bool:
+def limited(key: str, limit: int, window: int, *, fail_closed: bool = False) -> bool:
     if SHARED:
         try:
             return _firestore(key, limit, window)
-        except Exception:
-            pass  # fall back to the per-instance limit
+        except Exception as exc:
+            if fail_closed:
+                raise HTTPException(
+                    503,
+                    "Abuse protection is temporarily unavailable. Please try again later.",
+                ) from exc
     return _memory(key, limit, window)

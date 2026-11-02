@@ -9,6 +9,11 @@ export interface Service {
   note?: string;
 }
 
+export function serviceTextKey(slug: string, field: string): string {
+  const key = slug.replace(/-([a-z])/g, (_, letter: string) => letter.toUpperCase());
+  return `service.${key}.${field}`;
+}
+
 // Every statement here describes something the app already does.
 export const SERVICES: Service[] = [
   {

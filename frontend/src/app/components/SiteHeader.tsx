@@ -4,23 +4,26 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { useAuth } from "../lib/auth";
+import { useText } from "../lib/siteconfig";
 import ThemeToggle from "./ThemeToggle";
 
-const LINKS = [
-  { href: "/about", label: "About us" },
-  { href: "/services", label: "Services" },
-  { href: "/contact", label: "Contact us" },
-];
-
 export default function SiteHeader() {
+  const LINKS = [
+    { href: "/about", label: useText("nav.about") },
+    { href: "/services", label: useText("nav.services") },
+    { href: "/contact", label: useText("nav.contact") },
+  ];
+  const brand = useText("brand.name");
+  const dashboard = useText("nav.dashboard");
+  const signIn = useText("nav.signIn");
   const { user } = useAuth();
   const path = usePathname();
   const [open, setOpen] = useState(false);
 
   const active = (href: string) => path.startsWith(href);
   const account = user
-    ? { href: "/app", label: "Dashboard" }
-    : { href: "/login", label: "Sign in" };
+    ? { href: "/app", label: dashboard }
+    : { href: "/login", label: signIn };
 
   return (
     <header className="sticky top-0 z-30 border-b border-line bg-bg/85 backdrop-blur">
@@ -29,7 +32,7 @@ export default function SiteHeader() {
           href="/"
           className="font-display text-xl font-bold tracking-tight"
         >
-          Inquiry Desk
+          {brand}
         </Link>
 
         <nav aria-label="Main" className="hidden items-center gap-1 md:flex">

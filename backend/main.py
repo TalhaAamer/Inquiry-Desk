@@ -1,20 +1,30 @@
+import base64
+import hashlib
 import os
+import re
+import time
 from typing import Literal
 from urllib.parse import urlsplit
 
 from anthropic import Anthropic
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException, Path, Request, Response
+from fastapi import Depends, FastAPI, Header, HTTPException, Path, Request, Response
+from firebase_admin import firestore
 from pydantic import BaseModel, Field, model_validator
 
 load_dotenv()
 
 import accounts  # noqa: E402
+import admins  # noqa: E402
+import companies  # noqa: E402
 import enquiries  # noqa: E402
 import fb  # noqa: E402
 import inbox  # noqa: E402
 import otp  # noqa: E402
+from ratelimit import limited  # noqa: E402
+import siteconfig  # noqa: E402
 import sites  # noqa: E402
+import turnstile  # noqa: E402
 from webfetch import FetchError, fetch_text, post_json  # noqa: E402
 
 client = Anthropic()  
@@ -90,8 +100,15 @@ class Triage(BaseModel):
     )
 
 
-# The interactive API docs list every route, so they are switched off. The frontend does not use them.
-app = FastAPI(title="Inquiry Desk", docs_url=None, redoc_url=None, openapi_url=None)
+# Docs are enabled in development (ENV != "production") and disabled in production
+# so the full route list is not publicly exposed.
+_dev = os.getenv("ENV", "development") != "production"
+app = FastAPI(
+    title="Inquiry Desk",
+    docs_url="/docs" if _dev else None,
+    redoc_url="/redoc" if _dev else None,
+    openapi_url="/openapi.json" if _dev else None,
+)
 
 
 @app.middleware("http")
@@ -117,7 +134,7 @@ class Simulation(BaseModel):
     fix: str = Field(description="One sentence: the single best edit to the reply")
 
 
-@app.post("/api/simulate", response_model=Simulation)
+@app.post("/api/simulate", response_model=Simulation, dependencies=[siteconfig.require("simulator")])
 def simulate(body: Simulate, uid: str = Depends(fb.ai_user)):
     try:
         res = client.messages.create(
@@ -258,6 +275,8 @@ def extra_context(body: Inquiry) -> str:
 
 @app.post("/api/triage", response_model=Triage)
 def triage(body: Inquiry, uid: str = Depends(fb.ai_user)):
+    if body.images and not siteconfig.enabled("screenshots"):
+        raise HTTPException(403, "Screenshot upload is turned off right now.")
     try:
         content: list[dict] = [
             {"type": "image", "source": {"type": "base64", "media_type": i.media_type, "data": i.data}}
@@ -377,7 +396,7 @@ class Gaps(BaseModel):
     gaps: list[Gap] = Field(max_length=6)
 
 
-@app.post("/api/gaps", response_model=Gaps)
+@app.post("/api/gaps", response_model=Gaps, dependencies=[siteconfig.require("knowledgeGaps")])
 def find_gaps(body: GapsIn, uid: str = Depends(fb.ai_user)):
     try:
         questions = "\n".join(f"- {q[:200]}" for q in body.questions)
@@ -419,7 +438,7 @@ class Proposal(BaseModel):
     email_body: str = Field(description="Ready-to-send proposal email, under 220 words, no invented prices or dates")
 
 
-@app.post("/api/proposal", response_model=Proposal)
+@app.post("/api/proposal", response_model=Proposal, dependencies=[siteconfig.require("proposals")])
 def make_proposal(body: ProposalIn, uid: str = Depends(fb.ai_user)):
     try:
         return ask_tool(
@@ -478,9 +497,127 @@ class ProfileIn(BaseModel):
     last_name: str = Field(min_length=1, max_length=50)
 
 
+class AuthAttemptIn(BaseModel):
+    action: Literal["signin", "signup", "reset", "google"]
+    email: str = Field(default="", max_length=254)
+    website: str = Field(default="", max_length=200)
+    turnstile_token: str = Field(default="", max_length=2048)
+
+
 @app.post("/api/account/profile")
 def account_profile(body: ProfileIn, decoded: dict = Depends(fb.token_user)):
     return fb.save_name(decoded["uid"], body.first_name, body.last_name)
+
+
+PHONE = re.compile(r"^\+?[0-9][0-9 ()\-]{5,24}$")
+PHOTO_PREFIX = "data:image/jpeg;base64,"
+PHOTO_MAX = 150_000
+
+
+class DetailsIn(BaseModel):
+    first_name: str = Field(min_length=1, max_length=50)
+    last_name: str = Field(min_length=1, max_length=50)
+    phone: str = Field(default="", max_length=30)
+
+
+class PhotoIn(BaseModel):
+    photo: str | None = Field(default=None, max_length=PHOTO_MAX + 100)
+
+
+def _details(uid: str) -> dict:
+    snap = fb.db().collection("users").document(uid).get()
+    data = snap.to_dict() or {} if snap.exists else {}
+    photo = data.get("photo")
+    return {
+        "firstName": data.get("firstName") if isinstance(data.get("firstName"), str) else "",
+        "lastName": data.get("lastName") if isinstance(data.get("lastName"), str) else "",
+        "phone": data.get("phone") if isinstance(data.get("phone"), str) else "",
+        "photo": photo if isinstance(photo, str) and photo.startswith("data:image/") else None,
+    }
+
+
+@app.get("/api/account/details")
+def account_details(decoded: dict = Depends(fb.verified_token)):
+    return _details(decoded["uid"])
+
+
+@app.post("/api/account/details")
+def account_save_details(body: DetailsIn, decoded: dict = Depends(fb.verified_token)):
+    uid = decoded["uid"]
+    if limited(f"profile:{uid}", 60, 3600):
+        raise HTTPException(429, "Too many changes. Please try again later.")
+    phone = body.phone.strip()
+    if phone and not PHONE.match(phone):
+        raise HTTPException(400, "That phone number does not look right.")
+    fb.save_name(uid, body.first_name, body.last_name)
+    fb.db().collection("users").document(uid).set({"phone": phone}, merge=True)
+    return _details(uid)
+
+
+@app.post("/api/account/photo")
+def account_save_photo(body: PhotoIn, decoded: dict = Depends(fb.verified_token)):
+    uid = decoded["uid"]
+    if limited(f"profile:{uid}", 60, 3600):
+        raise HTTPException(429, "Too many changes. Please try again later.")
+    ref = fb.db().collection("users").document(uid)
+    if body.photo is None:
+        if ref.get().exists:
+            ref.update({"photo": firestore.DELETE_FIELD})
+        return _details(uid)
+    photo = body.photo
+    if not photo.startswith(PHOTO_PREFIX) or len(photo) > PHOTO_MAX:
+        raise HTTPException(400, "Choose a smaller picture.")
+    try:
+        base64.b64decode(photo[len(PHOTO_PREFIX):], validate=True)
+    except Exception:
+        raise HTTPException(400, "That picture could not be read.")
+    ref.set({"photo": photo, "updatedAt": int(time.time() * 1000)}, merge=True)
+    return _details(uid)
+
+
+@app.post("/api/auth/attempt")
+def auth_attempt(body: AuthAttemptIn, request: Request):
+    if body.website.strip():
+        return {"allowed": False}
+
+    email = body.email.strip().lower()
+    if body.action != "google" and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+        raise HTTPException(400, "Enter a valid email address.")
+
+    ip_limits = {
+        "signin": (40, 3600),
+        "signup": (8, 3600),
+        "reset": (10, 3600),
+        "google": (40, 3600),
+    }
+    if limited(f"auth:{body.action}:ip:{client_ip(request)}", *ip_limits[body.action], fail_closed=True):
+        raise HTTPException(429, "Too many attempts from this connection. Please try again later.")
+
+    if email:
+        email_hash = hashlib.sha256(email.encode()).hexdigest()
+        email_limits = {
+            "signin": (10, 900),
+            "signup": (3, 86400),
+            "reset": (3, 3600),
+            "google": (10, 900),
+        }
+        if limited(f"auth:{body.action}:email:{email_hash}", *email_limits[body.action], fail_closed=True):
+            raise HTTPException(429, "Too many attempts for this email. Please try again later.")
+
+    turnstile.verify(body.turnstile_token, request, "auth", client_ip(request))
+    return {"allowed": True}
+
+
+class AdminSignupCheckIn(BaseModel):
+    email: str = Field(max_length=254)
+
+
+@app.post("/api/admin/signup-check")
+def admin_signup_check(body: AdminSignupCheckIn, request: Request):
+    """Lets the separate admin site refuse sign-ups when new companies are closed and the email was not invited."""
+    if limited(f"admin-signup:{client_ip(request)}", 10, 3600, fail_closed=True):
+        raise HTTPException(429, "Too many attempts. Please try again later.")
+    return {"allowed": admins.can_register(body.email)}
 
 
 class OtpVerifyIn(BaseModel):
@@ -514,7 +651,7 @@ def inbox_account(uid: str = Depends(fb.current_user)):
     return {"account": accounts.info(uid)}
 
 
-@app.post("/api/inbox/connect")
+@app.post("/api/inbox/connect", dependencies=[siteconfig.require("emailInbox")])
 def inbox_connect(body: ConnectIn, uid: str = Depends(fb.current_user)):
     if sites.limited(f"connect:{uid}", 10, 3600):
         raise HTTPException(429, "Too many attempts. Try again later.")
@@ -533,7 +670,7 @@ def inbox_disconnect(uid: str = Depends(fb.current_user)):
     return {"ok": True}
 
 
-@app.post("/api/inbox/fetch")
+@app.post("/api/inbox/fetch", dependencies=[siteconfig.require("emailInbox")])
 def inbox_fetch(body: FetchIn, uid: str = Depends(fb.current_user)):
     try:
         return {"emails": inbox.fetch_unread(accounts.load(uid), body.limit)}
@@ -541,7 +678,7 @@ def inbox_fetch(body: FetchIn, uid: str = Depends(fb.current_user)):
         raise HTTPException(400, str(e))
 
 
-@app.post("/api/inbox/send")
+@app.post("/api/inbox/send", dependencies=[siteconfig.require("emailInbox")])
 def inbox_send(body: SendReply, uid: str = Depends(fb.current_user)):
     try:
         inbox.send_reply(accounts.load(uid), body.to, body.subject, body.body, body.in_reply_to)
@@ -571,6 +708,12 @@ WIDGET_CORS = {
     "Access-Control-Max-Age": "600",
     "Vary": "Origin",
 }
+
+
+@app.middleware("http")
+async def company_scope(request: Request, call_next):
+    companies.set_current(request.headers.get("x-company-id", ""))
+    return await call_next(request)
 
 
 @app.middleware("http")
@@ -607,6 +750,7 @@ class WidgetSubmit(BaseModel):
     message: str = Field(max_length=4000)
     page_url: str = Field(default="", max_length=300)
     website: str = Field(default="", max_length=200)  # hidden field that only bots fill in
+    turnstile_token: str = Field(default="", max_length=2048)
 
 
 class EnquiryIn(BaseModel):
@@ -618,14 +762,138 @@ class EnquiryIn(BaseModel):
     method: str = Field(default="", max_length=20)
     message: str = Field(max_length=4000)
     website: str = Field(default="", max_length=200)  # hidden field that only bots fill in
+    turnstile_token: str = Field(default="", max_length=2048)
 
 
-@app.post("/api/contact-us")
+@app.post("/api/contact-us", dependencies=[siteconfig.require("contactUs")])
 def contact_us(body: EnquiryIn, request: Request):
+    if body.website.strip():
+        return {"ok": True}
+    turnstile.verify(body.turnstile_token, request, "contact", client_ip(request))
     try:
         enquiries.submit(client_ip(request), body.model_dump())
     except enquiries.EnquiryError as e:
         raise HTTPException(e.status, str(e))
+    return {"ok": True}
+
+
+@app.get("/api/config")
+def public_config():
+    """Feature switches, colors and texts for everyone (no sign-in needed)."""
+    return siteconfig.load()
+
+
+@app.get("/api/security/turnstile")
+def turnstile_config():
+    return turnstile.public_config()
+
+
+class ConfigIn(BaseModel):
+    features: dict = Field(default_factory=dict)
+    colors: dict = Field(default_factory=dict)
+    texts: dict = Field(default_factory=dict)
+
+
+class EnquiryRef(BaseModel):
+    id: str = Field(pattern=r"^[A-Za-z0-9]{10,40}$")
+
+
+class EnquiryStatus(EnquiryRef):
+    status: Literal["new", "read", "done"]
+
+
+@app.get("/api/admin/me")
+def admin_me(decoded: dict = Depends(fb.verified_token), x_company_id: str = Header(default="")):
+    found = admins.membership(str(decoded.get("email") or ""))
+    if found is None:
+        return {
+            "admin": False,
+            "canCreateCompany": not admins.registration_closed(),
+            "codeRequired": admins.code_required(),
+        }
+    if found["role"] == "support":
+        chosen = x_company_id.strip().lower()
+        company = {"id": chosen, "name": companies.name_of(chosen)} if companies.exists(chosen) else None
+        return {"admin": True, "role": "support", "company": company, "companies": companies.list_all()}
+    company_id = found["companyId"]
+    return {
+        "admin": True,
+        "role": found["role"],
+        "company": {"id": company_id, "name": companies.name_of(company_id) or company_id},
+    }
+
+
+class CompanyIn(BaseModel):
+    name: str = Field(min_length=2, max_length=60)
+    code: str = Field(default="", max_length=200)
+
+
+@app.post("/api/admin/company")
+def admin_create_company(body: CompanyIn, request: Request, decoded: dict = Depends(fb.verified_token)):
+    """Self-service registration: the person creating a company becomes its first owner."""
+    if limited(f"company-create-ip:{client_ip(request)}", 10, 3600, fail_closed=True):
+        raise HTTPException(429, "Too many attempts. Please try again later.")
+    email = str(decoded.get("email") or "").lower()
+    if not email:
+        raise HTTPException(400, "This account has no email address.")
+    return {"company": admins.create_company(body.name, email, decoded["uid"], body.code)}
+
+
+class AdminPersonIn(BaseModel):
+    email: str = Field(min_length=3, max_length=254)
+    role: Literal["owner", "admin"] = "admin"
+
+
+class AdminEmailIn(BaseModel):
+    email: str = Field(min_length=3, max_length=254)
+
+
+@app.get("/api/admin/admins")
+def admin_list(owner: dict = Depends(fb.owner_user)):
+    return {"admins": admins.listing(owner["companyId"])}
+
+
+@app.post("/api/admin/admins/add")
+def admin_add(body: AdminPersonIn, owner: dict = Depends(fb.owner_user)):
+    admins.add(owner["companyId"], body.email, body.role, owner.get("email", ""))
+    return {"admins": admins.listing(owner["companyId"])}
+
+
+@app.post("/api/admin/admins/remove")
+def admin_remove(body: AdminEmailIn, owner: dict = Depends(fb.owner_user)):
+    if body.email.strip().lower() == str(owner.get("email") or "").lower():
+        raise HTTPException(400, "You cannot remove yourself. Ask another owner to do it.")
+    admins.remove(owner["companyId"], body.email)
+    return {"admins": admins.listing(owner["companyId"])}
+
+
+@app.get("/api/admin/config")
+def admin_get_config(admin: dict = Depends(fb.admin_user)):
+    return siteconfig.load(admin["companyId"], fresh=True)
+
+
+@app.put("/api/admin/config")
+def admin_save_config(body: ConfigIn, admin: dict = Depends(fb.admin_user)):
+    return siteconfig.save(admin["companyId"], body.model_dump(), admin.get("email", ""))
+
+
+@app.get("/api/admin/enquiries")
+def admin_enquiries(admin: dict = Depends(fb.admin_user)):
+    return {"enquiries": enquiries.list_all(admin["companyId"])}
+
+
+@app.post("/api/admin/enquiries/status")
+def admin_enquiry_status(body: EnquiryStatus, admin: dict = Depends(fb.admin_user)):
+    try:
+        enquiries.set_status(admin["companyId"], body.id, body.status)
+    except enquiries.EnquiryError as e:
+        raise HTTPException(e.status, str(e))
+    return {"ok": True}
+
+
+@app.post("/api/admin/enquiries/delete")
+def admin_enquiry_delete(body: EnquiryRef, admin: dict = Depends(fb.admin_user)):
+    enquiries.delete(admin["companyId"], body.id)
     return {"ok": True}
 
 
@@ -637,8 +905,12 @@ def widget_config(site_id: str = SITE_ID):
         raise HTTPException(e.status, str(e))
 
 
-@app.post("/api/widget/{site_id}/submit")
+@app.post("/api/widget/{site_id}/submit", dependencies=[siteconfig.require("contactPages")])
 def widget_submit(body: WidgetSubmit, request: Request, site_id: str = SITE_ID):
+    if body.website.strip():
+        return {"ok": True}
+    if same_origin(request):
+        turnstile.verify(body.turnstile_token, request, "contact", client_ip(request))
     try:
         sites.submit(
             site_id, request.headers.get("origin"), same_origin(request), client_ip(request),
@@ -689,13 +961,13 @@ def site_list(uid: str = Depends(fb.current_user)):
     return {"sites": site_call(sites.list_sites, uid)}
 
 
-@app.post("/api/sites")
+@app.post("/api/sites", dependencies=[siteconfig.require("contactPages")])
 def site_create(body: SiteCreate, request: Request, uid: str = Depends(fb.current_user)):
     options = body.options.model_dump() if body.options else None
     return site_call(sites.create_site, uid, body.name, body.origins, options, client_ip(request))
 
 
-@app.post("/api/sites/update")
+@app.post("/api/sites/update", dependencies=[siteconfig.require("contactPages")])
 def site_update(body: SiteUpdate, uid: str = Depends(fb.current_user)):
     options = body.options.model_dump() if body.options else None
     return site_call(sites.update_site, uid, body.id, body.origins, options)
@@ -706,7 +978,7 @@ def site_count(body: SiteRef, uid: str = Depends(fb.current_user)):
     return {"waiting": site_call(sites.waiting_count, uid, body.id)}
 
 
-@app.post("/api/sites/pull")
+@app.post("/api/sites/pull", dependencies=[siteconfig.require("contactPages")])
 def site_pull(body: SitePull, uid: str = Depends(fb.current_user)):
     return {"emails": site_call(sites.pull, uid, body.id, body.limit, body.include_pulled)}
 
@@ -723,7 +995,7 @@ class Notify(BaseModel):
     data: dict = Field(default_factory=dict)
 
 
-@app.post("/api/notify")
+@app.post("/api/notify", dependencies=[siteconfig.require("contactPages")])
 def notify(body: Notify, uid: str = Depends(fb.current_user)):
     if sites.limited(f"notify:{uid}", 60, 3600):
         raise HTTPException(429, "Too many alerts. Try again later.")

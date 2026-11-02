@@ -4,7 +4,7 @@ They are stored in Firestore (collection `enquiries`), which the browser cannot 
 import re
 import time
 
-import fb
+import companies
 from ratelimit import limited
 
 CATEGORIES = [
@@ -30,6 +30,7 @@ SERVICES = [
     "Writing style and voice",
 ]
 CONTACT_METHODS = ["Email", "Phone", "WhatsApp"]
+STATUSES = ["new", "read", "done"]
 
 IP_LIMIT = (5, 3600)  # messages per IP per hour
 DAILY_LIMIT = 500
@@ -43,9 +44,46 @@ class EnquiryError(Exception):
         self.status = status
 
 
+def _public(doc) -> dict:
+    data = doc.to_dict() or {}
+    out = {"id": doc.id}
+    for key in ("name", "email", "phone", "category", "service", "method", "message", "status"):
+        value = data.get(key)
+        if isinstance(value, str) and value.strip():
+            out[key] = value
+    if out.get("service") == "Not sure yet":
+        out.pop("service")  # the form's default, so the visitor did not pick one
+    out["createdAt"] = data.get("createdAt") if isinstance(data.get("createdAt"), (int, float)) else 0
+    out.setdefault("status", "new")
+    return out
+
+
+def list_all(company_id: str, limit: int = 300) -> list[dict]:
+    """Newest first. Fields the visitor left empty are left out."""
+    docs = companies.enquiries_col(company_id).order_by("createdAt", direction="DESCENDING").limit(limit).stream()
+    return [_public(d) for d in docs]
+
+
+def set_status(company_id: str, enquiry_id: str, status: str) -> None:
+    if status not in STATUSES:
+        raise EnquiryError("Unknown status.")
+    ref = companies.enquiries_col(company_id).document(enquiry_id)
+    if not ref.get().exists:
+        raise EnquiryError("That message no longer exists.", 404)
+    ref.update({"status": status})
+
+
+def delete(company_id: str, enquiry_id: str) -> None:
+    companies.enquiries_col(company_id).document(enquiry_id).delete()
+
+
 def submit(ip: str, data: dict) -> None:
     if str(data.get("website", "")).strip():
         return  # A bot filled the hidden field; pretend it worked.
+
+    company_id = companies.current_id()
+    if not companies.exists(company_id):
+        raise EnquiryError("This contact form is not available.", 404)
 
     name = str(data.get("name", "")).strip()
     email = str(data.get("email", "")).strip()
@@ -72,12 +110,12 @@ def submit(ip: str, data: dict) -> None:
     if len(message) < 10:
         raise EnquiryError("Please write a little more so we can help.")
 
-    if limited(f"enquiry-ip:{ip}", *IP_LIMIT):
+    if limited(f"enquiry-ip:{ip}", *IP_LIMIT, fail_closed=True):
         raise EnquiryError("You are sending messages too fast. Please try again later.", 429)
-    if limited("enquiry-day", DAILY_LIMIT, 86400):
+    if limited(f"enquiry-day:{company_id}", DAILY_LIMIT, 86400, fail_closed=True):
         raise EnquiryError("We are receiving a lot of messages. Please try again tomorrow.", 429)
 
-    fb.db().collection("enquiries").add(
+    companies.enquiries_col(company_id).add(
         {
             "name": name[:100],
             "email": email[:254],

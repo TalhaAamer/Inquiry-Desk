@@ -38,7 +38,16 @@ Inquiry Desk helps a business deal with customer messages faster. Paste or fetch
 - Sign up and sign in with Google or email and password, with first and last name.
 - Email verification with a 6-digit code that expires after 15 minutes.
 - Each person's data is private to their own account.
-- Light, dark or system theme, saved to your account.
+- Light, dark or system theme, saved in a first-party cookie on the current device.
+- Sign-in, sign-up and password-reset requests are rate-limited by IP and hashed email; public contact forms use honeypot fields and server-side rate limits.
+- Production sign-in, sign-up, password-reset, and first-party contact forms also require Cloudflare Turnstile. Set `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` in the backend environment; keep the secret out of source control.
 
 **Public website**
 - Home, Services (with a detail page for each service), About us and Contact us pages, with a contact form for visitors.
+
+**Admin dashboard** (`/admin`)
+- Turn features on or off, change light and dark theme colors, and edit the site's texts and button labels, each in its own section.
+- See contact-form enquiries with name, email, phone, topic, service and message. Fields a visitor left empty are not shown. Mark enquiries as new, read or done, or delete them.
+- Only verified admins can use it; the check happens on the server.
+- Admin access: each admin belongs to one company (stored in Firestore `adminMembers`). A confirmed email can register a company on the separate admin site (`inquiry-desk-admin`) and becomes its owner; owners add admins there. Emails in `ADMIN_EMAILS` are support staff who can open any company. Optional `ADMIN_REGISTRATION_CODE` requires a code to register; `ADMIN_REGISTRATION=closed` stops new companies. Site settings and enquiries are per company; the website picks its company from `NEXT_PUBLIC_COMPANY_ID` (sent as `X-Company-Id`), or the backend's `COMPANY_ID`, else `default`.
+- Settings are stored in Firestore (`config/site`) and served to visitors by `GET /api/config`. Changes can take up to about 15 seconds to appear.

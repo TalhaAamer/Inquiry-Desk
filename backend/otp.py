@@ -108,7 +108,7 @@ def send(uid: str, ip: str) -> dict:
         return {"verified": True}
     if not record.email:
         raise OtpError("This account has no email address to verify.")
-    if limited(f"otp-ip:{ip}", 20, 3600):
+    if limited(f"otp-ip:{ip}", 20, 3600, fail_closed=True):
         raise OtpError("Too many requests. Please try again later.", 429)
 
     code = f"{secrets.randbelow(1_000_000):06d}"
@@ -164,7 +164,7 @@ def verify(uid: str, code: str) -> dict:
     code = code.strip()
     if not re.fullmatch(r"\d{6}", code):
         raise OtpError("Enter the 6-digit code.")
-    if limited(f"otp-verify:{uid}", 15, 900):
+    if limited(f"otp-verify:{uid}", 15, 900, fail_closed=True):
         raise OtpError("Too many attempts. Please wait a few minutes.", 429)
 
     state, left = _check(fb.db().transaction(), _ref(uid), uid, code, time.time())
@@ -215,11 +215,11 @@ def _deliver(to: str, code: str, name: str) -> None:
         "Nobody can use the code without access to this inbox.\n"
     )
     msg.add_alternative(
-        f"""<div style="font-family:Arial,sans-serif;max-width:420px;margin:auto;padding:24px;color:#161b33">
+        f"""        <div style="font-family:Arial,sans-serif;max-width:420px;margin:auto;padding:24px;color:#2e2825">
 <p style="font-size:16px">{html.escape(greeting)}</p>
 <p style="font-size:15px">Use this code to finish setting up your Inquiry Desk account:</p>
-<p style="font-size:34px;font-weight:700;letter-spacing:10px;background:#eef0ff;border-radius:12px;padding:16px;text-align:center;margin:20px 0">{code}</p>
-<p style="font-size:13px;color:#5c6684">It works for 15 minutes and can be used once. If you did not try to sign up, you can ignore this email.</p>
+<p style="font-size:34px;font-weight:700;letter-spacing:10px;background:#f5f0e8;border-radius:12px;padding:16px;text-align:center;margin:20px 0">{code}</p>
+<p style="font-size:13px;color:#6e625c">It works for 15 minutes and can be used once. If you did not try to sign up, you can ignore this email.</p>
 </div>""",
         subtype="html",
     )

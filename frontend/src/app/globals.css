@@ -3,26 +3,32 @@
 
 
 :root {
-  color-scheme: light dark;
-  --bg: #edf0f7;      
-  --card: #ffffff;   
-  --ink: #121b33;    
-  --muted: #5c6684; 
-  --line: #d5dbea;    
-  --accent: #3340f5; 
-  --on: #ffffff;      
+  color-scheme: light;
+  --bg: #f5f0e8;
+  --card: #fffcf7;
+  --ink: #2e2825;
+  --muted: #6e625c;
+  --line: #ded2c7;
+  --accent: #9b4632;
+  --on: #ffffff;
+  --ok: #685017;
+  --warn: #8a5010;
+  --hot: #9b302b;
 }
 
-/* "System" follows the device. An explicit Light or Dark choice sets data-theme on <html>. */
+/* System follows the device; Light is the document default before the saved choice loads. */
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #0e1424;
-    --card: #171f36;
-    --ink: #eaefff;
-    --muted: #9aa5c6;
-    --line: #2a3558;
-    --accent: #7a85ff;
-    --on: #0e1424;
+  :root[data-theme="system"] {
+    --bg: #1d1917;
+    --card: #29221f;
+    --ink: #f2e9e1;
+    --muted: #c2b3a8;
+    --line: #4b3d36;
+    --accent: #e3977a;
+    --on: #291a16;
+    --ok: #d6b66f;
+    --warn: #e6a15b;
+    --hot: #ff9384;
   }
 }
 
@@ -30,15 +36,22 @@
   color-scheme: light;
 }
 
+:root[data-theme="system"] {
+  color-scheme: light dark;
+}
+
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #0e1424;
-  --card: #171f36;
-  --ink: #eaefff;
-  --muted: #9aa5c6;
-  --line: #2a3558;
-  --accent: #7a85ff;
-  --on: #0e1424;
+  --bg: #1d1917;
+  --card: #29221f;
+  --ink: #f2e9e1;
+  --muted: #c2b3a8;
+  --line: #4b3d36;
+  --accent: #e3977a;
+  --on: #291a16;
+  --ok: #d6b66f;
+  --warn: #e6a15b;
+  --hot: #ff9384;
 }
 
 
@@ -50,9 +63,9 @@
   --color-line: var(--line);
   --color-accent: var(--accent);
   --color-on: var(--on);
-  --color-ok: #1f9d7a;    
-  --color-warn: #d99a00;  
-  --color-hot: #e5484d;   
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-hot: var(--hot);
 
   --font-sans: var(--font-sans-src), system-ui, sans-serif;
   --font-display: var(--font-display-src), system-ui, sans-serif;
@@ -66,23 +79,23 @@ select {
   background-repeat: no-repeat;
   background-position: right 0.625rem center;
   background-size: 1rem;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235c6684' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236e625c' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 }
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) select {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239aa5c6' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  :root[data-theme="system"] select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23c2b3a8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   }
 }
 
 :root[data-theme="dark"] select {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239aa5c6' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23c2b3a8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 }
 
 /* The selected theme button follows <html data-theme>, so it is right before React loads. */
 :root[data-theme="light"] [data-theme-opt="light"],
 :root[data-theme="dark"] [data-theme-opt="dark"],
-:root:not([data-theme]) [data-theme-opt="system"] {
+:root[data-theme="system"] [data-theme-opt="system"] {
   background-color: var(--accent);
   color: var(--on);
 }

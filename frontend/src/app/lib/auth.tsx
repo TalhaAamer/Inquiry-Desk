@@ -5,6 +5,7 @@ import { deleteField, getDoc, setDoc } from "firebase/firestore";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { flushAll, setUid, userDoc } from "./cloud";
 import { auth } from "./firebase";
+import { useSessionTimeout } from "./sessionTimeout";
 
 export type Theme = "system" | "light" | "dark";
 
@@ -40,19 +41,27 @@ const Ctx = createContext<AuthState>({
 
 export const useAuth = () => useContext(Ctx);
 
-// The theme is the only thing kept in the browser, as a small cookie, so the right colors
-// are applied before the first paint. Everything else about the user lives in Firestore.
+const THEME_COOKIE = "inquiryDeskTheme";
+
+// Keep the theme in a cookie so the right colors are applied before the first paint.
 // Light is the default when nothing has been chosen yet.
 function applyTheme(theme: Theme) {
   const root = document.documentElement;
-  if (theme === "system") delete root.dataset.theme;
-  else root.dataset.theme = theme;
-  document.cookie = `theme=${theme}; path=/; max-age=31536000; SameSite=Lax`;
+  root.dataset.theme = theme;
+  document.cookie = `${THEME_COOKIE}=${theme}; path=/; max-age=31536000; SameSite=Lax`;
 }
 
-function cookieTheme(): Theme {
-  const m = document.cookie.match(/(?:^|; )theme=(light|dark|system)/);
-  return (m?.[1] as Theme | undefined) ?? "light";
+function cookieTheme(): Theme | null {
+  const cookies = document.cookie.split(";").map((cookie) => cookie.trim());
+  const current = cookies
+    .filter((cookie) => cookie.startsWith(`${THEME_COOKIE}=`))
+    .map((cookie) => cookie.slice(THEME_COOKIE.length + 1));
+  // Read the old, generic cookie once so existing preferences survive this change.
+  const legacy = cookies
+    .filter((cookie) => cookie.startsWith("theme="))
+    .map((cookie) => cookie.slice("theme=".length));
+  const saved = current[current.length - 1] ?? legacy[legacy.length - 1];
+  return saved === "light" || saved === "dark" || saved === "system" ? saved : null;
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -64,13 +73,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [rev, setRev] = useState(0);
 
   useEffect(() => {
-    // Sync the toggle with the cookie straight away, before Firebase finishes loading.
+    // Sync the document and toggle before Firebase finishes loading.
+    const savedTheme = cookieTheme() ?? "light";
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setThemeState(cookieTheme());
+    setThemeState(savedTheme);
+    applyTheme(savedTheme);
     return onAuthStateChanged(auth, async (next) => {
       setUid(next?.uid ?? null);
-      const fromCookie = cookieTheme();
+      const fromCookie = cookieTheme() ?? "light";
       setThemeState(fromCookie);
+      applyTheme(fromCookie);
       let ok = false;
       if (next) {
         // The saved token may be older than the verification, so ask for a fresh one before deciding.
@@ -90,11 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (typeof savedPhoto === "string" && savedPhoto.startsWith("data:image/")) {
               setUploaded(savedPhoto);
             }
-            const saved = snap.data()?.theme;
-            if (saved === "light" || saved === "dark" || saved === "system") {
-              setThemeState(saved);
-              applyTheme(saved);
-            }
+            // Theme is a per-device preference; it is not read from Firestore.
           } catch {
             // The theme just stays as it is.
           }
@@ -112,14 +120,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return ok;
   }, []);
 
+  // Theme is a per-device preference (stored in a cookie), not user data.
+  // We deliberately do NOT sync it to Firestore to avoid cross-device conflicts
+  // and the sign-in overwrite bug.
   const setTheme = useCallback((next: Theme) => {
     setThemeState(next);
     applyTheme(next);
-    if (auth.currentUser) {
-      void setDoc(userDoc(), { theme: next, updatedAt: Date.now() }, { merge: true }).catch(
-        () => {},
-      );
-    }
   }, []);
 
   const savePhoto = useCallback(async (dataUrl: string | null) => {
@@ -140,6 +146,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await flushAll();
     await fbSignOut(auth);
   }, []);
+
+  useSessionTimeout(!!user, signOut, user?.metadata.lastSignInTime);
 
   const photo = uploaded ?? user?.photoURL ?? null;
   const value = useMemo(
@@ -166,6 +174,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 export async function apiFetch(url: string, init: RequestInit = {}): Promise<Response> {
   const token = await auth.currentUser?.getIdToken();
   const headers = new Headers(init.headers);
+  if (process.env.NEXT_PUBLIC_COMPANY_ID) headers.set("X-Company-Id", process.env.NEXT_PUBLIC_COMPANY_ID);
   if (token) headers.set("Authorization", `Bearer ${token}`);
   return fetch(url, { ...init, headers });
 }

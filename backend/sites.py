@@ -24,7 +24,7 @@ DEFAULT_OPTIONS = {
     "title": "Contact us",
     "greeting": "Send us a message and we will reply by email.",
     "button": "Message us",
-    "color": "#3340f5",
+    "color": "#9b4632",
     "position": "right",
 }
 
@@ -197,9 +197,9 @@ def submit(site_id: str, origin: str | None, same_origin: bool, ip: str, name: s
         raise SiteError("Please write a message.")
     if email and not EMAIL.match(email):
         raise SiteError("That email address does not look right.")
-    if limited(f"ip:{site_id}:{ip}", *IP_LIMIT):
+    if limited(f"ip:{site_id}:{ip}", *IP_LIMIT, fail_closed=True):
         raise SiteError("You are sending messages too fast. Please wait a few minutes.", 429)
-    if limited(f"site:{site_id}", SITE_DAILY_LIMIT, 86400):
+    if limited(f"site:{site_id}", SITE_DAILY_LIMIT, 86400, fail_closed=True):
         raise SiteError("This contact page has reached its daily limit.", 429)
     if not _sites().document(site_id).get().exists:
         raise SiteError("Unknown contact page.", 404)

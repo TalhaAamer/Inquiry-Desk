@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import TurnstileWidget from "./TurnstileWidget";
 
 const field =
   "w-full rounded-xl border border-line bg-card px-3.5 py-2.5 text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
@@ -11,6 +12,8 @@ export default function ContactForm({ siteId }: { siteId: string }) {
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
   const [trap, setTrap] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const [turnstileReset, setTurnstileReset] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [sent, setSent] = useState(false);
@@ -47,6 +50,7 @@ export default function ContactForm({ siteId }: { siteId: string }) {
           message,
           website: trap,
           page_url: window.location.href.slice(0, 300),
+          turnstile_token: turnstileToken,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -60,6 +64,8 @@ export default function ContactForm({ siteId }: { siteId: string }) {
       setError(e instanceof Error ? e.message : "Could not send. Please try again.");
     } finally {
       setBusy(false);
+      setTurnstileToken("");
+      setTurnstileReset((n) => n + 1);
     }
   }
 
@@ -141,6 +147,11 @@ export default function ContactForm({ siteId }: { siteId: string }) {
         autoComplete="off"
         aria-hidden="true"
         className="absolute -left-[9999px] h-px w-px opacity-0"
+      />
+      <TurnstileWidget
+        action="contact"
+        onToken={setTurnstileToken}
+        resetKey={turnstileReset}
       />
       {error && (
         <p role="alert" className="mt-4 rounded-xl border border-hot px-3.5 py-3 text-hot">

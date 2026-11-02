@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { SERVICES } from "../../lib/services";
+import { SERVICES, serviceTextKey } from "../../lib/services";
+import { T } from "../../lib/siteconfig";
 
 export const metadata: Metadata = {
   title: "Services",
@@ -11,10 +12,9 @@ export default function Services() {
   return (
     <main className="mx-auto w-full max-w-6xl px-4 pb-8 sm:px-6">
       <section className="py-12 text-center sm:py-16">
-        <h1 className="font-display text-4xl font-bold tracking-tight sm:text-5xl">Our services</h1>
+        <h1 className="font-display text-4xl font-bold tracking-tight sm:text-5xl"><T id="services.title" /></h1>
         <p className="mx-auto mt-4 max-w-2xl text-lg text-muted">
-          Everything you need to sort, answer and keep track of customer messages. Open any service
-          to see exactly what it does and how it works.
+          <T id="services.intro" />
         </p>
       </section>
 
@@ -29,9 +29,9 @@ export default function Services() {
                 {i + 1}
               </span>
               <span>
-                <b className="block font-display text-lg font-semibold">{s.title}</b>
-                <span className="mt-1 block text-sm text-muted">{s.short}</span>
-                <span className="mt-3 block text-sm font-medium text-accent">See details →</span>
+                <b className="block font-display text-lg font-semibold"><T id={serviceTextKey(s.slug, "title")} /></b>
+                <span className="mt-1 block text-sm text-muted"><T id={serviceTextKey(s.slug, "short")} /></span>
+                <span className="mt-3 block text-sm font-medium text-accent"><T id="services.seeDetails" /></span>
               </span>
             </Link>
           </li>
@@ -39,12 +39,12 @@ export default function Services() {
       </ul>
 
       <section className="my-12 rounded-[20px] border border-line bg-card p-8 text-center shadow-sm">
-        <h2 className="font-display text-2xl font-semibold">Not sure which one you need?</h2>
+        <h2 className="font-display text-2xl font-semibold"><T id="services.ctaTitle" /></h2>
         <p className="mx-auto mt-2 max-w-xl text-muted">
-          Tell us what kind of messages you get and we will point you in the right direction.
+          <T id="services.ctaText" />
         </p>
         <Link href="/contact" className="mt-5 inline-block rounded-xl bg-accent px-7 py-3.5 font-semibold text-on">
-          Contact us
+          <T id="services.ctaButton" />
         </Link>
       </section>
     </main>

@@ -7,6 +7,7 @@ import { isRepeatTrouble } from "../lib/memory";
 import { canSpeak, speak, speechLang, stopSpeaking } from "../lib/voice";
 import { Category, PriorContact, Sentiment, Simulation, Team, Triage } from "../lib/types";
 import ProposalCard from "./ProposalCard";
+import { useFeature } from "../lib/siteconfig";
 
 const FEELING: Record<Simulation["feeling"], string> = {
   relieved: "😌",
@@ -94,6 +95,9 @@ export default function ResultCard({
     onReplyChange?.(r);
   };
   const [speaking, setSpeaking] = useState(false);
+  const fSim = useFeature("simulator");
+  const fSpeak = useFeature("readAloud");
+  const fProposal = useFeature("proposals");
   const [sending, setSending] = useState(false);
   const [sendMsg, setSendMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const learn = () => onLearn?.(data.reply_draft, reply);
@@ -398,7 +402,7 @@ export default function ResultCard({
         </div>
       )}
 
-      {(data.category === "new_project" || data.category === "partnership") &&
+      {fProposal && (data.category === "new_project" || data.category === "partnership") &&
         customerMessage.trim().length >= 10 && (
           <ProposalCard message={customerMessage} context={context} />
         )}
@@ -417,7 +421,7 @@ export default function ResultCard({
           >
             Copy reply
           </button>
-          {canSpeak() && (
+          {fSpeak && canSpeak() && (
             <button
               type="button"
               onClick={() => {
@@ -479,7 +483,7 @@ export default function ResultCard({
         )}
       </div>
 
-      <div className="mt-3 rounded-xl border border-line px-3.5 py-3">
+      <div className={`mt-3 rounded-xl border border-line px-3.5 py-3 ${fSim ? "" : "hidden"}`}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <b className="block text-sm font-semibold">

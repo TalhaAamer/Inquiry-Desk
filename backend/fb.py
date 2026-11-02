@@ -67,6 +67,68 @@ def current_user(authorization: str = Header(default="")) -> str:
     return decoded["uid"]
 
 
+def _membership(decoded: dict) -> dict | None:
+    import admins
+
+    email = str(decoded.get("email") or "").lower()
+    if decoded.get("otpVerified") is not True or not email:
+        return None
+    return admins.membership(email)
+
+
+def _role(decoded: dict) -> str | None:
+    found = _membership(decoded)
+    return found["role"] if found else None
+
+
+def verified_token(authorization: str = Header(default="")) -> dict:
+    """The decoded token of a signed-in caller who has confirmed their email."""
+    decoded = _verify(authorization)
+    if decoded.get("otpVerified") is not True:
+        raise HTTPException(403, "Please confirm your email address first.")
+    return decoded
+
+
+def is_admin_token(decoded: dict) -> bool:
+    return _role(decoded) is not None
+
+
+def admin_role(decoded: dict) -> str | None:
+    return _role(decoded)
+
+
+def _admin(authorization: str, company_header: str) -> dict:
+    import companies
+
+    decoded = _verify(authorization)
+    found = _membership(decoded)
+    if found is None:
+        raise HTTPException(404, "Not found.")
+    if limited(f"admin:{decoded['uid']}", 240, 3600):
+        raise HTTPException(429, "Too many requests. Try again later.")
+    company_id, role = found["companyId"], found["role"]
+    if role == "support":
+        # Support staff pick which company they are helping; they act as its owner.
+        company_id = company_header.strip().lower()
+        if not companies.exists(company_id):
+            raise HTTPException(400, "Choose a company first.")
+        role = "owner"
+    return {**decoded, "companyId": company_id, "adminRole": role}
+
+
+def admin_user(authorization: str = Header(default=""), x_company_id: str = Header(default="")) -> dict:
+    """Allows only admins, scoped to their company. Everyone else gets 404, so the dashboard's existence is not revealed."""
+    return _admin(authorization, x_company_id)
+
+
+def owner_user(authorization: str = Header(default=""), x_company_id: str = Header(default="")) -> dict:
+    """Allows only owners (they manage who else is an admin)."""
+    decoded = _admin(authorization, x_company_id)
+    if decoded["adminRole"] != "owner":
+        raise HTTPException(403, "Only an owner can do this.")
+    return decoded
+
+
 _BAD_NAME_CHARS = re.compile(r"[0-9<>{}\[\]()\\/@:;|\"=+*%$#!?^~_&\x00-\x1f]")
 
 

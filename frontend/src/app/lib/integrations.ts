@@ -30,7 +30,7 @@ export const DEFAULT_OPTIONS: WidgetOptions = {
   title: "Contact us",
   greeting: "Send us a message and we will reply by email.",
   button: "Message us",
-  color: "#3340f5",
+  color: "#9b4632",
   position: "right",
 };
 

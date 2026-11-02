@@ -2,15 +2,15 @@ import type { NextConfig } from "next";
 
 const isProd = process.env.NODE_ENV === "production";
 
-// Sources the app really talks to: Firebase Auth/Firestore, Google sign-in and reCAPTCHA (phone codes).
+// Sources the app really talks to: Firebase Auth/Firestore, Google sign-in, reCAPTCHA and Turnstile.
 const csp = [
   "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${isProd ? "" : " 'unsafe-eval'"} https://apis.google.com https://www.google.com https://www.gstatic.com`,
+  `script-src 'self' 'unsafe-inline'${isProd ? "" : " 'unsafe-eval'"} https://apis.google.com https://www.google.com https://www.gstatic.com https://challenges.cloudflare.com`,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https://*.googleusercontent.com https://www.gstatic.com",
   "font-src 'self' data:",
-  `connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://www.google.com${isProd ? "" : " ws://localhost:* ws://127.0.0.1:*"}`,
-  "frame-src https://*.firebaseapp.com https://accounts.google.com https://www.google.com",
+  `connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://www.google.com https://challenges.cloudflare.com${isProd ? "" : " ws://localhost:* ws://127.0.0.1:*"}`,
+  "frame-src https://*.firebaseapp.com https://accounts.google.com https://www.google.com https://challenges.cloudflare.com",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",

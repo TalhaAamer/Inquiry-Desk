@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { T, companyHeader, useFeature, useText } from "../lib/siteconfig";
+import TurnstileWidget from "./TurnstileWidget";
 
 const CATEGORIES = [
   "General question",
@@ -42,11 +44,16 @@ export default function EnquiryForm() {
   const [method, setMethod] = useState("Email");
   const [message, setMessage] = useState("");
   const [trap, setTrap] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const [turnstileReset, setTurnstileReset] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [sent, setSent] = useState("");
 
   const needsPhone = method !== "Email";
+  const open = useFeature("contactUs");
+  const sendLabel = useText("contact.send");
+  const sendingLabel = useText("contact.sending");
 
   // After the thank-you message, bring the empty form back on its own.
   useEffect(() => {
@@ -77,9 +84,17 @@ export default function EnquiryForm() {
     try {
       const res = await fetch("/api/contact-us", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...companyHeader() },
         body: JSON.stringify({
-          name, email, phone, category, service, method, message, website: trap,
+          name,
+          email,
+          phone,
+          category,
+          service,
+          method,
+          message,
+          website: trap,
+          turnstile_token: turnstileToken,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -92,14 +107,24 @@ export default function EnquiryForm() {
       setError(err instanceof Error ? err.message : "Could not send. Please try again.");
     } finally {
       setBusy(false);
+      setTurnstileToken("");
+      setTurnstileReset((n) => n + 1);
     }
+  }
+
+  if (!open) {
+    return (
+      <p role="status" className="py-8 text-center text-muted">
+        <T id="contact.off" />
+      </p>
+    );
   }
 
   if (sent) {
     return (
       <div role="status" className="py-8 text-center">
         <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full bg-ok/15 text-2xl text-ok">✓</div>
-        <h2 className="font-display text-2xl font-bold">Thank you, we got your message</h2>
+        <h2 className="font-display text-2xl font-bold"><T id="contact.thanksTitle" /></h2>
         <p className="mx-auto mt-2 max-w-md text-muted">
           We will reply to {sent}
           {needsPhone ? ` or by ${method}` : ""} soon.
@@ -112,22 +137,22 @@ export default function EnquiryForm() {
     <form onSubmit={submit} noValidate className="relative space-y-4">
       <div className="grid gap-4 sm:grid-cols-2">
         <label className={label}>
-          Full name
+          <T id="contact.labelName" />
           <input value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" maxLength={100} required className={`${field} mt-1.5 font-normal`} />
         </label>
         <label className={label}>
-          Email
+          <T id="contact.labelEmail" />
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" maxLength={254} required className={`${field} mt-1.5 font-normal`} />
         </label>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <label className={label}>
-          Phone number {needsPhone ? "" : <span className="font-normal">(optional)</span>}
+          <T id="contact.labelPhone" /> {needsPhone ? "" : <span className="font-normal">(optional)</span>}
           <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" maxLength={30} placeholder="+92 300 1234567" className={`${field} mt-1.5 font-normal`} />
         </label>
         <label className={label}>
-          How should we reply?
+          <T id="contact.labelMethod" />
           <select value={method} onChange={(e) => setMethod(e.target.value)} className={`${field} mt-1.5 font-normal`}>
             {METHODS.map((m) => <option key={m}>{m}</option>)}
           </select>
@@ -136,14 +161,14 @@ export default function EnquiryForm() {
 
       <div className="grid gap-4 sm:grid-cols-2">
         <label className={label}>
-          What is it about?
+          <T id="contact.labelAbout" />
           <select value={category} onChange={(e) => setCategory(e.target.value)} required className={`${field} mt-1.5 font-normal`}>
             <option value="" disabled>Choose one…</option>
             {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
           </select>
         </label>
         <label className={label}>
-          Which service? <span className="font-normal">(optional)</span>
+          <T id="contact.labelService" /> <span className="font-normal">(optional)</span>
           <select value={service} onChange={(e) => setService(e.target.value)} className={`${field} mt-1.5 font-normal`}>
             {SERVICES.map((s) => <option key={s}>{s}</option>)}
           </select>
@@ -151,7 +176,7 @@ export default function EnquiryForm() {
       </div>
 
       <label className={`${label} block`}>
-        Message
+        <T id="contact.labelMessage" />
         <textarea value={message} onChange={(e) => setMessage(e.target.value)} maxLength={MAX_MESSAGE} required placeholder="Tell us a bit more so we can help properly." className={`${field} mt-1.5 min-h-36 resize-y font-normal`} />
         <span className="mt-1 flex justify-between gap-3 text-xs font-normal">
           <span>Write at least {MIN_MESSAGE} characters (up to {MAX_MESSAGE.toLocaleString("en-US")}).</span>
@@ -170,6 +195,12 @@ export default function EnquiryForm() {
         className="absolute -left-[9999px] h-px w-px opacity-0"
       />
 
+      <TurnstileWidget
+        action="contact"
+        onToken={setTurnstileToken}
+        resetKey={turnstileReset}
+      />
+
       {error && (
         <p role="alert" className="rounded-xl border border-hot px-3.5 py-3 text-hot">{error}</p>
       )}
@@ -179,10 +210,10 @@ export default function EnquiryForm() {
         disabled={busy}
         className="w-full rounded-xl bg-accent py-3.5 font-semibold text-on transition active:scale-[.98] disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
       >
-        {busy ? "Sending…" : "Send message"}
+        {busy ? sendingLabel : sendLabel}
       </button>
       <p className="text-center text-xs text-muted">
-        We use your details only to reply to this message.
+        <T id="contact.privacy" />
       </p>
     </form>
   );

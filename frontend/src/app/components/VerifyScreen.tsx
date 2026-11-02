@@ -33,6 +33,11 @@ export default function VerifyScreen() {
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const started = useRef(false);
+  const redirecting = useRef(false);
+
+  const routeToDashboard = useCallback(async () => {
+    router.replace("/app");
+  }, [router]);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
@@ -42,8 +47,11 @@ export default function VerifyScreen() {
   useEffect(() => {
     if (loading) return;
     if (!user) router.replace("/login");
-    else if (verified && !done) router.replace("/app");
-  }, [user, loading, verified, done, router]);
+    else if (verified && !done && !redirecting.current) {
+      redirecting.current = true;
+      void routeToDashboard();
+    }
+  }, [user, loading, verified, done, router, routeToDashboard]);
 
   const apply = useCallback((r: OtpReply) => {
     const at = Date.now();
@@ -119,7 +127,8 @@ export default function VerifyScreen() {
       }
       setDone(true);
       await recheckVerified();
-      router.replace("/app");
+      redirecting.current = true;
+      await routeToDashboard();
     } catch {
       setError("Could not reach the server. Check your connection and try again.");
       setCode("");
