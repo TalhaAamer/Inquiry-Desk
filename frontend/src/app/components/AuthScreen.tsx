@@ -295,6 +295,22 @@ export default function AuthScreen({ mode }: { mode: "in" | "up" }) {
     router.replace("/app");
   }, [user, loading, verified, busy, router]);
 
+  // A sign-in refused because the account belongs to another company leaves its reason here.
+  useEffect(() => {
+    const show = () => {
+      try {
+        const notice = sessionStorage.getItem("inquiryDeskNotice");
+        if (notice) {
+          sessionStorage.removeItem("inquiryDeskNotice");
+          setError(notice);
+        }
+      } catch {}
+    };
+    show();
+    window.addEventListener("inquiryDeskNotice", show);
+    return () => window.removeEventListener("inquiryDeskNotice", show);
+  }, []);
+
   // Coming back with the browser's Back button must not show old entries.
   useEffect(() => {
     const clear = (e: PageTransitionEvent) => {
@@ -338,7 +354,7 @@ export default function AuthScreen({ mode }: { mode: "in" | "up" }) {
         body: JSON.stringify({
           action,
           email: email.trim(),
-          website: trap,
+          website: trap.trim() === email.trim() ? "" : trap, // autofill can copy the email into the hidden field
           turnstile_token: turnstileToken,
         }),
       });
@@ -485,13 +501,15 @@ export default function AuthScreen({ mode }: { mode: "in" | "up" }) {
               {resetting ? (
                 <form onSubmit={sendReset} className="space-y-3">
                   <input
-                    name="website"
+                    name="hp_field_x"
                     value={trap}
                     onChange={(e) => setTrap(e.target.value)}
                     tabIndex={-1}
                     autoComplete="off"
+                    data-lpignore="true"
+                    data-1p-ignore
                     aria-hidden="true"
-                    className="absolute -left-[9999px] h-px w-px opacity-0"
+                    className="absolute left-[-9999px] h-px w-px opacity-0"
                   />
                   <h1 className="font-display text-2xl font-semibold">Reset your password</h1>
                   <p className="pb-2 text-sm text-muted">
@@ -587,13 +605,15 @@ export default function AuthScreen({ mode }: { mode: "in" | "up" }) {
 
                   <form onSubmit={submit} className="space-y-3">
                     <input
-                      name="website"
+                      name="hp_field_x"
                       value={trap}
                       onChange={(e) => setTrap(e.target.value)}
                       tabIndex={-1}
                       autoComplete="off"
+                      data-lpignore="true"
+                      data-1p-ignore
                       aria-hidden="true"
-                      className="absolute -left-[9999px] h-px w-px opacity-0"
+                      className="absolute left-[-9999px] h-px w-px opacity-0"
                     />
                     {mode === "up" && (
                       <div className="grid gap-3 sm:grid-cols-2">

@@ -192,7 +192,7 @@ export default function EnquiryForm() {
         tabIndex={-1}
         autoComplete="off"
         aria-hidden="true"
-        className="absolute -left-[9999px] h-px w-px opacity-0"
+        className="absolute left-[-9999px] h-px w-px opacity-0"
       />
 
       <TurnstileWidget

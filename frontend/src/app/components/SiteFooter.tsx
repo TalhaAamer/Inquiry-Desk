@@ -37,6 +37,7 @@ export default function SiteFooter() {
           <h2 className="text-sm font-semibold">Company</h2>
           <ul className="mt-3 space-y-2 text-sm text-muted">
             <li><Link href="/about" className="hover:text-ink"><T id="nav.about" /></Link></li>
+            <li><Link href="/faq" className="hover:text-ink">FAQ</Link></li>
             <li><Link href="/contact" className="hover:text-ink"><T id="nav.contact" /></Link></li>
           </ul>
         </nav>

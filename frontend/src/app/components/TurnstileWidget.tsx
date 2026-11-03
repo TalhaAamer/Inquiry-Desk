@@ -131,5 +131,5 @@ export default function TurnstileWidget({
   if (!config.siteKey) {
     return <p className="text-sm text-hot" role="alert">Human verification is not configured. Please contact the site administrator.</p>;
   }
-  return <div ref={container} className="min-h-[65px]" aria-label="Human verification" />;
+  return <div ref={container} className="min-h-16.25" aria-label="Human verification" />;
 }
