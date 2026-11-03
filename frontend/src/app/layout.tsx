@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Bricolage_Grotesque, Instrument_Sans } from "next/font/google"; 
+import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css"; 
 import { AuthProvider } from "./lib/auth";
 import { SiteConfigProvider, THEME_BOOT_SCRIPT } from "./lib/siteconfig";
@@ -49,6 +51,8 @@ export default function RootLayout({
         <SiteConfigProvider>
           <AuthProvider>{children}</AuthProvider>
         </SiteConfigProvider>
+        <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );
