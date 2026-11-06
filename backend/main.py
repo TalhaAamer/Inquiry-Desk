@@ -20,6 +20,7 @@ import companies  # noqa: E402
 import enquiries  # noqa: E402
 import fb  # noqa: E402
 import inbox  # noqa: E402
+import newsletter  # noqa: E402
 import otp  # noqa: E402
 from ratelimit import limited  # noqa: E402
 import siteconfig  # noqa: E402
@@ -765,6 +766,13 @@ class EnquiryIn(BaseModel):
     turnstile_token: str = Field(default="", max_length=2048)
 
 
+class NewsletterIn(BaseModel):
+    email: str = Field(max_length=254)
+    consent: bool = False
+    website: str = Field(default="", max_length=200)
+    turnstile_token: str = Field(default="", max_length=2048)
+
+
 @app.post("/api/contact-us", dependencies=[siteconfig.require("contactUs")])
 def contact_us(body: EnquiryIn, request: Request):
     if body.website.strip():
@@ -773,6 +781,18 @@ def contact_us(body: EnquiryIn, request: Request):
     try:
         enquiries.submit(client_ip(request), body.model_dump())
     except enquiries.EnquiryError as e:
+        raise HTTPException(e.status, str(e))
+    return {"ok": True}
+
+
+@app.post("/api/newsletter/subscribe")
+def newsletter_subscribe(body: NewsletterIn, request: Request):
+    if body.website.strip():
+        return {"ok": True}
+    turnstile.verify(body.turnstile_token, request, "newsletter", client_ip(request))
+    try:
+        newsletter.subscribe(client_ip(request), body.email, body.website, body.consent)
+    except newsletter.NewsletterError as e:
         raise HTTPException(e.status, str(e))
     return {"ok": True}
 

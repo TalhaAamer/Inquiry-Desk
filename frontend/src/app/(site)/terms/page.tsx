@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import LegalDocument from "../../components/LegalDocument";
 
 export const metadata: Metadata = {
   title: "Terms and conditions",
@@ -60,27 +61,15 @@ const sections = [
 
 export default function TermsPage() {
   return (
-    <main className="mx-auto w-full max-w-4xl px-4 pb-10 sm:px-6">
-      <header className="py-12 sm:py-16">
-        <p className="text-sm font-semibold text-accent">Using Inquiry Desk</p>
-        <h1 className="mt-2 font-display text-4xl font-bold tracking-tight sm:text-5xl">Terms and conditions</h1>
-        <p className="mt-3 text-sm text-muted">Last updated: November 4, 2026</p>
-      </header>
-
-      <div className="space-y-8">
-        {sections.map((section) => (
-          <section key={section.title} className="border-t border-line pt-6">
-            <h2 className="font-display text-xl font-semibold">{section.title}</h2>
-            <div className="mt-3 space-y-3 leading-relaxed text-muted">
-              {section.paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
-            </div>
-          </section>
-        ))}
-      </div>
-
+    <LegalDocument
+      eyebrow="Using Inquiry Desk"
+      title="Terms and conditions"
+      updated="November 4, 2026"
+      sections={sections}
+    >
       <p className="mt-10 border-t border-line pt-6 text-sm text-muted">
         Questions? <Link href="/contact" className="font-medium text-accent hover:underline">Contact us</Link>.
       </p>
-    </main>
+    </LegalDocument>
   );
 }

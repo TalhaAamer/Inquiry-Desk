@@ -55,7 +55,7 @@ export default function TurnstileWidget({
   onToken,
   resetKey,
 }: {
-  action: "auth" | "contact";
+  action: "auth" | "contact" | "newsletter";
   onToken: (token: string) => void;
   resetKey: number;
 }) {

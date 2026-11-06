@@ -109,8 +109,8 @@ const CORE_TEXT_SECTIONS: TextSection[] = [
       { key: "home.step3Text", label: "Step 3 text", text: "Check urgency and tone, edit the suggested reply, and send it only when your team is ready.", long: true },
       { key: "home.featuresTitle", label: "Section: What you get", text: "What you get" },
       { key: "home.learnMore", label: "Link: Learn more", text: "Learn more →" },
-      { key: "home.readyTitle", label: "Bottom box title", text: "Try it with a real customer message" },
-      { key: "home.readyText", label: "Bottom box text", text: "Add your business facts, review a draft, and decide what to send. Nothing is sent without your action.", long: true },
+      { key: "home.readyTitle", label: "Newsletter heading", text: "Practical notes for better customer conversations" },
+      { key: "home.readyText", label: "Newsletter description", text: "Join for occasional ideas and product updates from Inquiry Desk.", long: true },
     ],
   },
   {

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useAuth } from "../lib/auth";
 import { SERVICES } from "../lib/services";
 import { T, useText } from "../lib/siteconfig";
+import NewsletterSignup from "../components/NewsletterSignup";
 
 export default function Landing() {
   const { user } = useAuth();
@@ -82,18 +83,7 @@ export default function Landing() {
         </ul>
       </section>
 
-      <section className="my-10 rounded-[20px] border border-line bg-card p-8 text-center shadow-sm">
-        <h2 className="font-display text-2xl font-semibold"><T id="home.readyTitle" /></h2>
-        <p className="mx-auto mt-2 max-w-xl text-muted">
-          <T id="home.readyText" />
-        </p>
-        <Link
-          href={cta.href}
-          className="mt-5 inline-block rounded-xl bg-accent px-7 py-3.5 font-semibold text-on"
-        >
-          {cta.label}
-        </Link>
-      </section>
+      <NewsletterSignup />
     </main>
   );
 }

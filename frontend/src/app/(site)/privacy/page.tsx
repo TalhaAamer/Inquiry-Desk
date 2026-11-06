@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import LegalDocument from "../../components/LegalDocument";
 
 export const metadata: Metadata = {
   title: "Privacy policy",
@@ -11,6 +12,7 @@ const sections = [
     paragraphs: [
       "When you create an account, we handle account information such as your email address, profile details and sign-in verification status. If you choose to add a profile photo, phone number, business facts or preferences, we handle those too.",
       "Messages and other content you submit may include customer names, email addresses, phone numbers, message text, screenshots, attachments, email content and your edits to AI-generated drafts. Please avoid submitting payment-card details, passwords or information you are not authorized to share.",
+      "If you join the newsletter list, we store your email address and signup consent in Firebase. You can ask us to remove your address through the Contact page. Newsletter emails have not started yet.",
       "The app may use cookies or browser storage for preferences such as your theme and for app functionality. Vercel Analytics and Speed Insights may collect website usage and performance information.",
     ],
   },
@@ -48,23 +50,11 @@ const sections = [
 
 export default function PrivacyPolicyPage() {
   return (
-    <main className="mx-auto w-full max-w-4xl px-4 pb-10 sm:px-6">
-      <header className="py-12 sm:py-16">
-        <p className="text-sm font-semibold text-accent">Your information</p>
-        <h1 className="mt-2 font-display text-4xl font-bold tracking-tight sm:text-5xl">Privacy policy</h1>
-        <p className="mt-3 text-sm text-muted">Last updated: November 4, 2026</p>
-      </header>
-
-      <div className="space-y-8">
-        {sections.map((section) => (
-          <section key={section.title} className="border-t border-line pt-6">
-            <h2 className="font-display text-xl font-semibold">{section.title}</h2>
-            <div className="mt-3 space-y-3 leading-relaxed text-muted">
-              {section.paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
-            </div>
-          </section>
-        ))}
-      </div>
-    </main>
+    <LegalDocument
+      eyebrow="Your information"
+      title="Privacy policy"
+      updated="November 6, 2026"
+      sections={sections}
+    />
   );
 }
