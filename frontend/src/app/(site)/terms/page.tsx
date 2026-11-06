@@ -62,13 +62,19 @@ const sections = [
 export default function TermsPage() {
   return (
     <LegalDocument
-      eyebrow="Using Inquiry Desk"
       title="Terms and conditions"
       updated="November 4, 2026"
       sections={sections}
     >
       <p className="mt-10 border-t border-line pt-6 text-sm text-muted">
-        Questions? <Link href="/contact" className="font-medium text-accent hover:underline">Contact us</Link>.
+        Questions?{" "}
+        <Link
+          href="/contact"
+          className="font-medium text-accent hover:underline"
+        >
+          Contact us
+        </Link>
+        .
       </p>
     </LegalDocument>
   );

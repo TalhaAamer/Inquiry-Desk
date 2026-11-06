@@ -10,7 +10,6 @@ const slug = (title: string) =>
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
 
-// Keeps the section heading clear of the sticky site header.
 const OFFSET = 112;
 
 export default function LegalDocument({
@@ -20,7 +19,7 @@ export default function LegalDocument({
   sections,
   children,
 }: {
-  eyebrow: string;
+  eyebrow?: string;
   title: string;
   updated: string;
   sections: LegalSection[];

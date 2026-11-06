@@ -3,7 +3,8 @@ import LegalDocument from "../../components/LegalDocument";
 
 export const metadata: Metadata = {
   title: "Privacy policy",
-  description: "How Inquiry Desk handles account details, customer messages and usage information.",
+  description:
+    "How Inquiry Desk handles account details, customer messages and usage information.",
 };
 
 const sections = [
@@ -51,7 +52,6 @@ const sections = [
 export default function PrivacyPolicyPage() {
   return (
     <LegalDocument
-      eyebrow="Your information"
       title="Privacy policy"
       updated="November 6, 2026"
       sections={sections}
