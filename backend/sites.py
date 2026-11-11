@@ -127,7 +127,7 @@ def create_site(uid: str, name: str, origins_raw: str, options: dict | None, ip:
     if not name:
         raise SiteError("Give this contact page a name.")
     origins = parse_origins(origins_raw, allow_empty=True)
-    if limited(f"create:{ip}", *CREATE_LIMIT):
+    if limited(f"create:{ip}", *CREATE_LIMIT, fail_closed=True):
         raise SiteError("Too many contact pages created. Try again later.", 429)
     owned = _sites().where("ownerUid", "==", uid).count().get()
     if int(owned[0][0].value) >= MAX_SITES_PER_USER:

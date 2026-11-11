@@ -39,8 +39,26 @@ Inquiry Desk helps a business deal with customer messages faster. Paste or fetch
 - Email verification with a 6-digit code that expires after 15 minutes.
 - Each person's data is private to their own account.
 - Light, dark or system theme, saved in a first-party cookie on the current device.
-- Sign-in, sign-up and password-reset requests are rate-limited by IP and hashed email; public contact forms use honeypot fields and server-side rate limits.
-- Production sign-in, sign-up, password-reset, and first-party contact forms also require Cloudflare Turnstile. Set `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` in the backend environment; keep the secret out of source control.
+- The app checks sign-in, sign-up and password-reset attempts with IP/email rate limits and Cloudflare Turnstile before using Firebase Authentication. These checks are not a security boundary for Firebase's directly accessible authentication API; configure abuse protection and quotas in Firebase/Identity Platform as well.
+- Public first-party contact and newsletter forms use honeypots, server-side rate limits and Cloudflare Turnstile. Set `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` in the backend environment; keep the secret out of source control. Embedded third-party contact widgets also use origin checks, honeypots and rate limits, but do not use Turnstile.
+- Firebase Authentication handles password storage. Protected operations require a Firebase verified-email claim and an app verification claim bound to the same email address. Firestore Security Rules must independently enforce ownership and verification for browser access; review and test the rules actually deployed in Firebase.
+- Mailbox passwords are encrypted at rest; IMAP and SMTP connections verify TLS certificates. Set a strong `EMAIL_ENCRYPTION_KEY` and back it up securely: losing or changing it makes existing saved mailbox credentials unreadable.
+- Production email verification requires a configured SMTP server. Without `SMTP_HOST`, verification fails rather than writing codes to logs. For local development only, explicitly set `OTP_ALLOW_CONSOLE_DELIVERY=true` to print codes; never enable it in a deployed environment.
+
+The local `firestore.rules` and `firebase.json` files are ignored by Git and are not deployed automatically. Before deploying a rules change, test it with the Firestore emulator and review the rules currently deployed to the intended Firebase project. The Admin SDK bypasses these rules, so backend authorization remains necessary.
+
+Existing accounts must verify their email once more after deploying the address-bound verification changes. Ensure production SMTP is working first, then coordinate deployment of the backend, both frontends, and Firestore rules. Deploy the backend first and expect a brief interruption until the frontends and rules are updated; otherwise users may not be redirected to verification or may be unable to complete it.
+
+To run the rules regression test on Windows from the repository root, provide local `firestore.rules` and `firebase.json` files, install Java 21 or later and a supported Node.js version, then run:
+
+```powershell
+$tools = Join-Path $env:TEMP "inquiry-desk-firestore-test-tools"
+npm install --prefix $tools --no-save firebase-tools@15.35.0 @firebase/rules-unit-testing@6.0.0 firebase@13.2.0
+$env:NODE_PATH = Join-Path $tools "node_modules"
+& (Join-Path $tools "node_modules\.bin\firebase.cmd") emulators:exec --project demo-inquiry-desk --only firestore "node backend\tests\firestore_rules.test.cjs"
+```
+
+This uses a demo project and the local emulator; it does not deploy rules or access production data.
 
 **Public website**
 - Home, Services (with a detail page for each service), About us and Contact us pages, with a contact form for visitors.

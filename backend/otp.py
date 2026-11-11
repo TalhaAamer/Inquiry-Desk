@@ -5,7 +5,7 @@ Rules enforced here, on the server only:
 - only a salted keyed hash of the code is stored, never the code itself
 - 5 wrong guesses cancel the code, so a new one has to be requested
 - a new code can be requested once a minute, 5 times an hour, and replaces the old one
-- the code is sent to the address Firebase has on record, never to one the browser supplies
+- the code and verification claim are bound to the address Firebase has on record
 """
 
 import hashlib
@@ -30,6 +30,7 @@ MAX_ATTEMPTS = 5
 RESEND_AFTER = 60
 MAX_SENDS_PER_HOUR = 5
 CLAIM = "otpVerified"
+EMAIL_CLAIM = "otpVerifiedEmail"
 
 
 class OtpError(Exception):
@@ -45,8 +46,8 @@ def _key() -> bytes:
     return hashlib.sha256(b"inquiry-desk-otp:" + raw.encode()).digest()
 
 
-def _digest(uid: str, code: str, salt: str) -> str:
-    return hmac.new(_key(), f"{uid}:{salt}:{code}".encode(), hashlib.sha256).hexdigest()
+def _digest(uid: str, code: str, salt: str, email: str) -> str:
+    return hmac.new(_key(), f"{uid}:{salt}:{code}:{email}".encode(), hashlib.sha256).hexdigest()
 
 
 def _ref(uid: str):
@@ -59,7 +60,13 @@ def mask(email: str) -> str:
 
 
 def is_verified(record) -> bool:
-    return bool((record.custom_claims or {}).get(CLAIM))
+    claims = record.custom_claims or {}
+    return bool(
+        record.email
+        and record.email_verified
+        and claims.get(CLAIM) is True
+        and claims.get(EMAIL_CLAIM) == record.email
+    )
 
 
 def status(uid: str) -> dict:
@@ -71,14 +78,14 @@ def status(uid: str) -> dict:
     snap = _ref(uid).get()
     data = snap.to_dict() if snap.exists else {}
     now = time.time()
-    if data.get("hash") and data.get("expiresAt", 0) > now:
+    if data.get("hash") and data.get("email") == record.email and data.get("expiresAt", 0) > now:
         out["expiresIn"] = int(data["expiresAt"] - now)
         out["resendIn"] = max(0, math.ceil(data.get("sentAt", 0) + RESEND_AFTER - now))
     return out
 
 
 @firestore.transactional
-def _reserve(tx, ref, now: float, hashed: str, salt: str):
+def _reserve(tx, ref, now: float, hashed: str, salt: str, email: str):
     snap = ref.get(transaction=tx)
     data = snap.to_dict() if snap.exists else {}
     wait = data.get("sentAt", 0) + RESEND_AFTER - now
@@ -92,6 +99,7 @@ def _reserve(tx, ref, now: float, hashed: str, salt: str):
         {
             "hash": hashed,
             "salt": salt,
+            "email": email,
             "attempts": 0,
             "expiresAt": now + CODE_TTL,
             "sentAt": now,
@@ -114,7 +122,9 @@ def send(uid: str, ip: str) -> dict:
     code = f"{secrets.randbelow(1_000_000):06d}"
     salt = secrets.token_hex(16)
     ref = _ref(uid)
-    state, wait = _reserve(fb.db().transaction(), ref, time.time(), _digest(uid, code, salt), salt)
+    state, wait = _reserve(
+        fb.db().transaction(), ref, time.time(), _digest(uid, code, salt, record.email), salt, record.email
+    )
     if state == "wait":
         raise OtpError(f"Please wait {wait} seconds before asking for a new code.", 429)
     if state == "hourly":
@@ -135,12 +145,15 @@ def send(uid: str, ip: str) -> dict:
 
 
 @firestore.transactional
-def _check(tx, ref, uid: str, code: str, now: float):
+def _check(tx, ref, uid: str, code: str, now: float, email: str):
     snap = ref.get(transaction=tx)
     data = snap.to_dict() if snap.exists else {}
     if not data.get("hash"):
         return ("none", 0)
-    drop = {"hash": firestore.DELETE_FIELD, "salt": firestore.DELETE_FIELD}
+    drop = {"hash": firestore.DELETE_FIELD, "salt": firestore.DELETE_FIELD, "email": firestore.DELETE_FIELD}
+    if data.get("email") != email:
+        tx.update(ref, drop)
+        return ("changed", 0)
     if data.get("expiresAt", 0) <= now:
         tx.update(ref, drop)
         return ("expired", 0)
@@ -148,7 +161,7 @@ def _check(tx, ref, uid: str, code: str, now: float):
     if attempts >= MAX_ATTEMPTS:
         tx.update(ref, drop)
         return ("locked", 0)
-    if hmac.compare_digest(_digest(uid, code, data["salt"]), data["hash"]):
+    if hmac.compare_digest(_digest(uid, code, data["salt"], email), data["hash"]):
         tx.update(ref, drop)
         return ("ok", 0)
     attempts += 1
@@ -167,19 +180,31 @@ def verify(uid: str, code: str) -> dict:
     if limited(f"otp-verify:{uid}", 15, 900, fail_closed=True):
         raise OtpError("Too many attempts. Please wait a few minutes.", 429)
 
-    state, left = _check(fb.db().transaction(), _ref(uid), uid, code, time.time())
+    record = auth.get_user(uid)
+    if not record.email:
+        raise OtpError("This account has no email address to verify.")
+    email = record.email
+    state, left = _check(fb.db().transaction(), _ref(uid), uid, code, time.time(), email)
     if state == "none":
         raise OtpError("There is no active code. Please request a new one.")
     if state == "expired":
         raise OtpError("This code has expired. Please request a new one.")
     if state == "locked":
         raise OtpError("Too many wrong codes. Please request a new one.")
+    if state == "changed":
+        raise OtpError("Your email address changed. Please request a new one.")
     if state == "wrong":
         raise OtpError(f"That code is not right. {left} {'try' if left == 1 else 'tries'} left.")
 
     record = auth.get_user(uid)
-    auth.set_custom_user_claims(uid, {**(record.custom_claims or {}), CLAIM: True})
-    auth.update_user(uid, email_verified=True)
+    if record.email != email:
+        raise OtpError("Your email address changed. Please request a new one.")
+    auth.update_user(
+        uid,
+        email=email,
+        email_verified=True,
+        custom_claims={**(record.custom_claims or {}), CLAIM: True, EMAIL_CLAIM: email},
+    )
     fb.db().collection("users").document(uid).set(
         {"emailVerified": True, "verifiedAt": int(time.time() * 1000)}, merge=True
     )
@@ -190,7 +215,12 @@ def verify(uid: str, code: str) -> dict:
 def _deliver(to: str, code: str, name: str) -> None:
     host = os.getenv("SMTP_HOST", "").strip()
     if not host:
-        if os.getenv("APP_ENV", "development").lower() == "production":
+        if (
+            os.getenv("VERCEL") == "1"
+            or os.getenv("APP_ENV", "").lower() == "production"
+            or os.getenv("ENV", "").lower() == "production"
+            or os.getenv("OTP_ALLOW_CONSOLE_DELIVERY", "").lower() != "true"
+        ):
             raise RuntimeError("SMTP is not configured")
         print(
             f"[dev] Verification code for {to}: {code}  "

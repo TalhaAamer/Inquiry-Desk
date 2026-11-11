@@ -1,5 +1,7 @@
 import base64
+import binascii
 import hashlib
+import logging
 import os
 import re
 import time
@@ -9,6 +11,8 @@ from urllib.parse import urlsplit
 from anthropic import Anthropic
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, Path, Request, Response
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from firebase_admin import firestore
 from pydantic import BaseModel, Field, model_validator
 
@@ -30,6 +34,7 @@ from webfetch import FetchError, fetch_text, post_json  # noqa: E402
 
 client = Anthropic()  
 MODEL = os.getenv("MODEL", "claude-haiku-5-5")  
+logger = logging.getLogger(__name__)
 
 TONES = {
     "friendly": "warm and friendly",
@@ -38,9 +43,36 @@ TONES = {
 }
 
 
+def image_matches_type(data: bytes, media_type: str) -> bool:
+    if media_type == "image/jpeg":
+        return data.startswith(b"\xff\xd8\xff")
+    if media_type == "image/png":
+        return data.startswith(b"\x89PNG\r\n\x1a\n")
+    if media_type == "image/gif":
+        return data.startswith((b"GIF87a", b"GIF89a"))
+    if media_type == "image/webp":
+        return len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP"
+    return False
+
+
 class Image(BaseModel):
     media_type: Literal["image/jpeg", "image/png", "image/gif", "image/webp"]
     data: str = Field(max_length=7_000_000)  
+
+    @model_validator(mode="after")
+    def validate_image(self):
+        try:
+            decoded = base64.b64decode(self.data, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise ValueError("The image must be valid base64.") from exc
+        if not image_matches_type(decoded, self.media_type):
+            raise ValueError("The image does not match its declared format.")
+        return self
+
+
+def ai_failure(exc: Exception) -> HTTPException:
+    logger.error("AI request failed (%s)", type(exc).__name__)
+    return HTTPException(502, "The AI service could not process this request. Please try again.")
 
 
 class StyleExample(BaseModel):
@@ -112,6 +144,15 @@ app = FastAPI(
 )
 
 
+@app.exception_handler(RequestValidationError)
+async def validation_error(_request: Request, exc: RequestValidationError):
+    errors = [
+        {"type": error["type"], "loc": error["loc"], "msg": error["msg"]}
+        for error in exc.errors()
+    ]
+    return JSONResponse(status_code=422, content={"detail": errors})
+
+
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
     response = await call_next(request)
@@ -163,7 +204,7 @@ def simulate(body: Simulate, uid: str = Depends(fb.ai_user)):
         data = next(b.input for b in res.content if b.type == "tool_use")
         return Simulation(**data)
     except Exception as e:
-        raise HTTPException(502, f"The AI request failed: {e}")
+        raise ai_failure(e) from e
 
 
 class Refine(BaseModel):
@@ -215,7 +256,7 @@ def translate(body: Translate, uid: str = Depends(fb.ai_user)):
         data = next(b.input for b in res.content if b.type == "tool_use")
         return Translated(**data)
     except Exception as e:
-        raise HTTPException(502, f"The AI request failed: {e}")
+        raise ai_failure(e) from e
 
 
 @app.post("/api/refine", response_model=Refined)
@@ -246,7 +287,7 @@ def refine(body: Refine, uid: str = Depends(fb.ai_user)):
             raise ValueError("empty reply")
         return Refined(reply_draft=text)
     except Exception as e:
-        raise HTTPException(502, f"The AI request failed: {e}")
+        raise ai_failure(e) from e
 
 
 def extra_context(body: Inquiry) -> str:
@@ -316,7 +357,7 @@ def triage(body: Inquiry, uid: str = Depends(fb.ai_user)):
         data = next(b.input for b in res.content if b.type == "tool_use")
         return Triage(**data)
     except Exception as e:
-        raise HTTPException(502, f"The AI request failed: {e}")
+        raise ai_failure(e) from e
 
 
 def ask_tool(system: str, user: str, model: type[BaseModel], name: str, max_tokens: int = 1200):
@@ -375,7 +416,7 @@ def build_profile(body: ProfileSource, uid: str = Depends(fb.ai_user)):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(502, f"The AI request failed: {e}")
+        raise ai_failure(e) from e
 
 
 class GapsIn(BaseModel):
@@ -417,7 +458,7 @@ def find_gaps(body: GapsIn, uid: str = Depends(fb.ai_user)):
             900,
         )
     except Exception as e:
-        raise HTTPException(502, f"The AI request failed: {e}")
+        raise ai_failure(e) from e
 
 
 class ProposalIn(BaseModel):
@@ -459,7 +500,7 @@ def make_proposal(body: ProposalIn, uid: str = Depends(fb.ai_user)):
             1500,
         )
     except Exception as e:
-        raise HTTPException(502, f"The AI request failed: {e}")
+        raise ai_failure(e) from e
 
 
 class AccountIn(BaseModel):
@@ -545,7 +586,7 @@ def account_details(decoded: dict = Depends(fb.verified_token)):
 @app.post("/api/account/details")
 def account_save_details(body: DetailsIn, decoded: dict = Depends(fb.verified_token)):
     uid = decoded["uid"]
-    if limited(f"profile:{uid}", 60, 3600):
+    if limited(f"profile:{uid}", 60, 3600, fail_closed=True):
         raise HTTPException(429, "Too many changes. Please try again later.")
     phone = body.phone.strip()
     if phone and not PHONE.match(phone):
@@ -558,7 +599,7 @@ def account_save_details(body: DetailsIn, decoded: dict = Depends(fb.verified_to
 @app.post("/api/account/photo")
 def account_save_photo(body: PhotoIn, decoded: dict = Depends(fb.verified_token)):
     uid = decoded["uid"]
-    if limited(f"profile:{uid}", 60, 3600):
+    if limited(f"profile:{uid}", 60, 3600, fail_closed=True):
         raise HTTPException(429, "Too many changes. Please try again later.")
     ref = fb.db().collection("users").document(uid)
     if body.photo is None:
@@ -569,8 +610,10 @@ def account_save_photo(body: PhotoIn, decoded: dict = Depends(fb.verified_token)
     if not photo.startswith(PHOTO_PREFIX) or len(photo) > PHOTO_MAX:
         raise HTTPException(400, "Choose a smaller picture.")
     try:
-        base64.b64decode(photo[len(PHOTO_PREFIX):], validate=True)
-    except Exception:
+        decoded = base64.b64decode(photo[len(PHOTO_PREFIX):], validate=True)
+    except (binascii.Error, ValueError):
+        raise HTTPException(400, "That picture could not be read.")
+    if not image_matches_type(decoded, "image/jpeg"):
         raise HTTPException(400, "That picture could not be read.")
     ref.set({"photo": photo, "updatedAt": int(time.time() * 1000)}, merge=True)
     return _details(uid)
@@ -654,7 +697,7 @@ def inbox_account(uid: str = Depends(fb.current_user)):
 
 @app.post("/api/inbox/connect", dependencies=[siteconfig.require("emailInbox")])
 def inbox_connect(body: ConnectIn, uid: str = Depends(fb.current_user)):
-    if sites.limited(f"connect:{uid}", 10, 3600):
+    if sites.limited(f"connect:{uid}", 10, 3600, fail_closed=True):
         raise HTTPException(429, "Too many attempts. Try again later.")
     try:
         acc = body.account.build()
@@ -1017,7 +1060,7 @@ class Notify(BaseModel):
 
 @app.post("/api/notify", dependencies=[siteconfig.require("contactPages")])
 def notify(body: Notify, uid: str = Depends(fb.current_user)):
-    if sites.limited(f"notify:{uid}", 60, 3600):
+    if sites.limited(f"notify:{uid}", 60, 3600, fail_closed=True):
         raise HTTPException(429, "Too many alerts. Try again later.")
     try:
         # "text" suits Slack and Teams, "content" suits Discord, "inquiry" suits Zapier or your own code.

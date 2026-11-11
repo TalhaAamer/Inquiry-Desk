@@ -56,13 +56,24 @@ def token_user(authorization: str = Header(default="")) -> dict:
     return _verify(authorization)
 
 
+def has_verified_email(decoded: dict) -> bool:
+    email = decoded.get("email")
+    return (
+        isinstance(email, str)
+        and bool(email)
+        and decoded.get("otpVerified") is True
+        and decoded.get("email_verified") is True
+        and decoded.get("otpVerifiedEmail") == email
+    )
+
+
 def current_user(authorization: str = Header(default="")) -> str:
     """Returns the Firebase user id of the signed-in caller, or rejects the request.
 
     The caller must also have confirmed their email with a one-time code.
     """
     decoded = _verify(authorization)
-    if decoded.get("otpVerified") is not True:
+    if not has_verified_email(decoded):
         raise HTTPException(403, "Please confirm your email address first.")
     return decoded["uid"]
 
@@ -71,7 +82,7 @@ def _membership(decoded: dict) -> dict | None:
     import admins
 
     email = str(decoded.get("email") or "").lower()
-    if decoded.get("otpVerified") is not True or not email:
+    if not has_verified_email(decoded) or not email:
         return None
     return admins.membership(email)
 
@@ -84,7 +95,7 @@ def _role(decoded: dict) -> str | None:
 def verified_token(authorization: str = Header(default="")) -> dict:
     """The decoded token of a signed-in caller who has confirmed their email."""
     decoded = _verify(authorization)
-    if decoded.get("otpVerified") is not True:
+    if not has_verified_email(decoded):
         raise HTTPException(403, "Please confirm your email address first.")
     return decoded
 
@@ -104,7 +115,7 @@ def _admin(authorization: str, company_header: str) -> dict:
     found = _membership(decoded)
     if found is None:
         raise HTTPException(404, "Not found.")
-    if limited(f"admin:{decoded['uid']}", 240, 3600):
+    if limited(f"admin:{decoded['uid']}", 240, 3600, fail_closed=True):
         raise HTTPException(429, "Too many requests. Try again later.")
     company_id, role = found["companyId"], found["role"]
     if role == "support":
@@ -183,6 +194,6 @@ def record_sign_in(authorization: str = Header(default="")) -> dict:
 def ai_user(authorization: str = Header(default="")) -> str:
     """Same as current_user, plus a per-user hourly limit so one account cannot run up AI costs."""
     uid = current_user(authorization)
-    if limited(f"ai:{uid}", *AI_LIMIT):
+    if limited(f"ai:{uid}", *AI_LIMIT, fail_closed=True):
         raise HTTPException(429, "You have reached the hourly limit. Please try again later.")
     return uid

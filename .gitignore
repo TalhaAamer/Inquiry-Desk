@@ -11,8 +11,6 @@ service-account*.json
 *firebase-adminsdk*.json
 firestore.rules
 firebase.json
-
-
 .vscode/
 Thumbs.db
 *.log

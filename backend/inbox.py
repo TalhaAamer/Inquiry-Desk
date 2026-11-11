@@ -8,6 +8,7 @@ import imaplib
 import re
 import smtplib
 import socket
+import ssl
 import time
 from dataclasses import dataclass
 from email.message import EmailMessage
@@ -141,11 +142,12 @@ class _PinnedIMAP(imaplib.IMAP4_SSL):
 
 
 def _smtp(acc: Account):
+    context = ssl.create_default_context()
     if acc.smtp_port == 465:
-        server = _PinnedSMTP_SSL(acc.smtp_host, acc.smtp_port, timeout=15)
+        server = _PinnedSMTP_SSL(acc.smtp_host, acc.smtp_port, timeout=15, context=context)
     else:
         server = _PinnedSMTP(acc.smtp_host, acc.smtp_port, timeout=15)
-        server.starttls()
+        server.starttls(context=context)
     server.login(acc.email, acc.password)
     return server
 
@@ -153,7 +155,7 @@ def _smtp(acc: Account):
 def verify(acc: Account) -> None:
     """Check that both reading and sending work, so problems show up at connect time."""
     try:
-        with _PinnedIMAP(acc.imap_host, acc.imap_port, timeout=15) as imap:
+        with _PinnedIMAP(acc.imap_host, acc.imap_port, timeout=15, ssl_context=ssl.create_default_context()) as imap:
             imap.login(acc.email, acc.password)
         with _smtp(acc):
             pass
@@ -164,7 +166,7 @@ def verify(acc: Account) -> None:
 def fetch_unread(acc: Account, limit: int = 10) -> list[dict]:
     limit = max(1, min(limit, 20))
     try:
-        with _PinnedIMAP(acc.imap_host, acc.imap_port, timeout=15) as imap:
+        with _PinnedIMAP(acc.imap_host, acc.imap_port, timeout=15, ssl_context=ssl.create_default_context()) as imap:
             imap.login(acc.email, acc.password)
             imap.select("INBOX", readonly=True)
             status, data = imap.search(None, "UNSEEN")
@@ -198,7 +200,7 @@ def send_reply(acc: Account, to: str, subject: str, body: str, in_reply_to: str 
     to = to.strip()
     if not ADDRESS.match(to):
         raise InboxError("That is not a valid email address.")
-    if limited(f"send:{acc.email.lower()}", SEND_LIMIT_PER_HOUR, 3600):
+    if limited(f"send:{acc.email.lower()}", SEND_LIMIT_PER_HOUR, 3600, fail_closed=True):
         raise InboxError("Hourly sending limit reached. Try again later.")
 
     msg = EmailMessage()

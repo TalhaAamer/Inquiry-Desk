@@ -1,6 +1,6 @@
 "use client";
 
-import { onAuthStateChanged, signOut as fbSignOut, type User } from "firebase/auth";
+import { onAuthStateChanged, signOut as fbSignOut, type IdTokenResult, type User } from "firebase/auth";
 import { deleteField, getDoc, setDoc } from "firebase/firestore";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { flushAll, setUid, userDoc } from "./cloud";
@@ -40,6 +40,12 @@ const Ctx = createContext<AuthState>({
 });
 
 export const useAuth = () => useContext(Ctx);
+
+function hasVerifiedEmail(token: IdTokenResult): boolean {
+  const { email, email_verified, otpVerified, otpVerifiedEmail } = token.claims;
+  return typeof email === "string" && email.length > 0
+    && otpVerified === true && email_verified === true && otpVerifiedEmail === email;
+}
 
 const THEME_COOKIE = "inquiryDeskTheme";
 
@@ -86,8 +92,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       let ok = false;
       if (next) {
         // The saved token may be older than the verification, so ask for a fresh one before deciding.
-        ok = (await next.getIdTokenResult()).claims.otpVerified === true;
-        if (!ok) ok = (await next.getIdTokenResult(true)).claims.otpVerified === true;
+        ok = hasVerifiedEmail(await next.getIdTokenResult());
+        if (!ok) ok = hasVerifiedEmail(await next.getIdTokenResult(true));
       }
       setVerified(ok);
       setUser(next);
@@ -115,7 +121,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const recheckVerified = useCallback(async () => {
     const current = auth.currentUser;
     if (!current) return false;
-    const ok = (await current.getIdTokenResult(true)).claims.otpVerified === true;
+    const ok = hasVerifiedEmail(await current.getIdTokenResult(true));
     setVerified(ok);
     return ok;
   }, []);
