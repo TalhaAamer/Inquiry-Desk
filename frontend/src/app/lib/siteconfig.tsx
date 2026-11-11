@@ -303,10 +303,6 @@ function paint(css: string) {
   el.textContent = css;
 }
 
-// Runs before the first paint so a saved palette never flashes the default one.
-export const THEME_BOOT_SCRIPT =
-  "try{var c=localStorage.getItem('siteThemeCss');if(c&&c.length<3000&&/^[A-Za-z0-9 :;#,{}()\\-\"\\[\\]=@.]+$/.test(c)){var s=document.createElement('style');s.id='site-theme';s.textContent=c;document.head.appendChild(s)}}catch(e){}";
-
 type Ctx = {
   config: SiteConfig;
   loaded: boolean;
